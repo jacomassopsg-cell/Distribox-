@@ -1,79 +1,93 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OutLog Distribox — Preview</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OutLog One — Operação Logística Integrada</title>
+  <link rel="stylesheet" href="/static/style.css?v=3.1.0">
 </head>
 <body>
-    <header class="topbar">
-        <div class="logo">
-            <span class="logo-dot"></span>
-            <span>OutLog <strong>Distribox</strong></span>
+  <section id="loginScreen" class="login-screen">
+    <div class="login-panel">
+      <div class="login-logo">O1</div>
+      <h1>OUTLOG ONE</h1>
+      <p>Produção, estoque, expedição e devoluções em um só lugar</p>
+      <label>Usuário</label>
+      <input id="loginUsername" value="recebimento" autocomplete="username">
+      <label>Senha</label>
+      <input id="loginPassword" type="password" value="1234" autocomplete="current-password">
+      <button class="primary full" onclick="doLogin()">Entrar</button>
+      <div class="login-help">
+        <b>Recebimento:</b> recebimento / 1234<br>
+        <b>Qualidade:</b> qualidade1 / 1234 ou qualidade2 / 1234<br>
+        <b>Processamento:</b> processamento1 / 1234 ou processamento2 / 1234<br>
+        <b>Etiquetagem:</b> etiquetagem1 / 1234 ou etiquetagem2 / 1234<br>
+        <b>Estocagem:</b> estocagem1 / 1234 ou estocagem2 / 1234<br>
+        <b>Planejamento:</b> planejamento1 / 1234<br>
+        <b>Expedição:</b> expedicao1 / 1234<br>
+        <b>Devoluções:</b> devolucoes1 / 1234<br>
+        <b>Supervisão:</b> supervisor / 1234<br>
+        <b>Administração:</b> admin / 1234
+      </div>
+      <div id="loginError" class="error-message"></div>
+    </div>
+  </section>
+
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-logo">O1</div>
+        <div><strong>OUTLOG</strong><br>ONE <small>V3.1</small></div>
+      </div>
+      <nav>
+        <div class="nav-group">Operação</div>
+        <button class="nav-item active" data-view="dashboard" onclick="goTo('dashboard')"><span class="nav-icon">⌂</span>Central de Operações</button>
+        <button class="nav-item" data-view="receiving" onclick="goTo('receiving')"><span class="nav-icon">▣</span>Recebimento</button>
+        <button class="nav-item" data-view="quality" onclick="goTo('quality')"><span class="nav-icon">◇</span>Qualidade</button>
+        <button class="nav-item" data-view="processing" onclick="goTo('processing')"><span class="nav-icon">⚙</span>Processamento</button>
+        <button class="nav-item" data-view="labeling" onclick="goTo('labeling')"><span class="nav-icon">♢</span>Etiquetagem</button>
+        <button class="nav-item" data-view="storage-hub" onclick="goTo('storage-hub')"><span class="nav-icon">⌂</span>Estocagem</button>
+        <div class="nav-group">Saída e retorno</div>
+        <button class="nav-item" data-view="shipping" onclick="goTo('shipping')"><span class="nav-icon">♧</span>Expedição</button>
+        <button class="nav-item" data-view="returns-hub" onclick="goTo('returns-hub')"><span class="nav-icon">↩</span>Devoluções</button>
+        <div class="nav-group">Gestão</div>
+        <button class="nav-item" data-view="sgo-indicators" onclick="goTo('sgo-indicators')"><span class="nav-icon">☑</span>SGO e Indicadores</button>
+        <button class="nav-item" data-view="registrations" onclick="goTo('registrations')"><span class="nav-icon">▦</span>Cadastros</button>
+        <button class="nav-item" data-view="settings" onclick="goTo('settings')"><span class="nav-icon">⚙</span>Configurações</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="currentUser"></div>
+        <button onclick="logout()">Sair</button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div>
+          <h2 id="pageTitle">Dashboard</h2>
+          <p id="pageSubtitle">Recebimento, Qualidade e Processamento</p>
         </div>
-        <nav class="topnav">
-            <span class="nav-item active">Fluxo do CD</span>
-            <span class="nav-item">Visualizador de Casulos</span>
-            <span class="nav-item">Devoluções</span>
-        </nav>
-    </header>
-
-    <main>
-        <section class="board-section">
-            <h2>Fluxo do CD — por setor</h2>
-            <p class="subtitle">Cada card migra de setor conforme avança (Recebimento → Qualidade → Processamento → Estocagem)</p>
-
-            <div class="board">
-                {% for setor in setores %}
-                <div class="column">
-                    <div class="column-header">
-                        <span>{{ setor }}</span>
-                        <span class="count">{{ cards_por_setor[setor]|length }}</span>
-                    </div>
-                    <div class="column-body">
-                        {% for card in cards_por_setor[setor] %}
-                        <div class="card">
-                            <div class="card-title">{{ card.produto }}</div>
-                            <div class="card-ref">{{ card.referencia }}</div>
-                            <div class="card-status">{{ card.status }}</div>
-                            <div class="card-footer">
-                                <span class="qty">{{ card.quantidade }} pçs</span>
-                                {% if card.casulo %}
-                                <span class="casulo-tag">{{ card.casulo }}</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="empty">Nenhum card aqui</div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-
-        <section class="casulo-section">
-            <h2>Visualizador de Casulos — prévia</h2>
-            <p class="subtitle">Rua 09 (exemplo) — ocupação em tempo real por casulo</p>
-
-            <div class="casulo-grid">
-                {% for c in casulos %}
-                <div class="casulo-box {{ 'full' if c.ocupacao == c.capacidade else ('empty-box' if c.ocupacao == 0 else '') }}">
-                    <div class="casulo-col">Col. {{ c.coluna }}</div>
-                    <div class="casulo-tipo">{{ c.tipo }}</div>
-                    <div class="casulo-bar">
-                        <div class="casulo-fill" style="width: {{ (c.ocupacao / c.capacidade * 100)|round|int }}%"></div>
-                    </div>
-                    <div class="casulo-qty">{{ c.ocupacao }}/{{ c.capacidade }}</div>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
+        <div class="topbar-actions">
+          <div class="global-search"><span>⌕</span><input id="globalSearch" placeholder="Buscar (Ctrl + K)" onkeydown="globalSearchKey(event)"></div>
+          <button class="top-icon" title="Atualizar" onclick="refreshCurrentView()">↻</button>
+          <button class="top-icon" title="Ajuda" onclick="showQuickHelp()">?</button>
+          <button class="top-icon" title="Sair" onclick="logout()">⇥</button>
+          <span id="clock" class="hidden"></span>
+        </div>
+      </header>
+      <section id="mainContent" class="content"></section>
     </main>
+  </div>
 
-    <footer>
-        <p>Preview de interface — dados de exemplo, sem banco de dados ainda.</p>
-    </footer>
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeModal()">×</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/app.js?v=3.1.0"></script>
 </body>
 </html>
+

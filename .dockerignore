@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.db
+*.sqlite*
+data/uploads/*
+arquivo_teste/*
+.git
+.gitignore
+*.zip
+
