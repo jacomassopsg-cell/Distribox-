@@ -1,0 +1,240 @@
+:root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e7e9ee;
+    --text-dim: #9aa0ac;
+    --accent: #4f8cff;
+    --accent-2: #2ecc9c;
+    --warn: #ff9f43;
+    --danger: #ff6b6b;
+    --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 28px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 17px;
+}
+
+.logo-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent-2);
+    box-shadow: 0 0 8px var(--accent-2);
+}
+
+.topnav {
+    display: flex;
+    gap: 24px;
+}
+
+.nav-item {
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    padding-bottom: 4px;
+    border-bottom: 2px solid transparent;
+}
+
+.nav-item.active {
+    color: var(--text);
+    border-bottom: 2px solid var(--accent);
+}
+
+main {
+    padding: 28px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+h2 {
+    margin: 0 0 4px 0;
+    font-size: 19px;
+}
+
+.subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin: 0 0 18px 0;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.column {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.column-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--panel-2);
+    border-bottom: 1px solid var(--border);
+}
+
+.count {
+    background: var(--border);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.column-body {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 120px;
+}
+
+.card {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.card-title {
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.card-ref {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.card-status {
+    font-size: 12px;
+    color: var(--accent);
+    margin-top: 6px;
+}
+
+.card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.qty {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.casulo-tag {
+    font-size: 11px;
+    background: rgba(46, 204, 156, 0.15);
+    color: var(--accent-2);
+    padding: 2px 7px;
+    border-radius: 6px;
+}
+
+.empty {
+    color: var(--text-dim);
+    font-size: 12px;
+    text-align: center;
+    padding: 20px 0;
+}
+
+.casulo-section {
+    margin-top: 40px;
+}
+
+.casulo-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+}
+
+.casulo-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+}
+
+.casulo-box.full {
+    border-color: var(--danger);
+}
+
+.casulo-box.empty-box {
+    border-color: var(--border);
+    opacity: 0.6;
+}
+
+.casulo-col {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.casulo-tipo {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 4px 0;
+}
+
+.casulo-bar {
+    background: var(--border);
+    border-radius: 6px;
+    height: 6px;
+    overflow: hidden;
+    margin: 8px 0 6px 0;
+}
+
+.casulo-fill {
+    background: var(--accent);
+    height: 100%;
+}
+
+.casulo-qty {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+@media (max-width: 900px) {
+    .board { grid-template-columns: repeat(2, 1fr); }
+    .casulo-grid { grid-template-columns: repeat(3, 1fr); }
+}
