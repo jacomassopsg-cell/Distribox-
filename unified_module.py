@@ -1,3 +1,4 @@
+# Redeploy forcado em 2026-09-01 apos Railway ter deployado um commit antigo por engano
 from __future__ import annotations
 
 import io
@@ -12,6 +13,8 @@ from typing import Any
 from fastapi import File, HTTPException, Request, UploadFile
 from openpyxl import load_workbook
 from pypdf import PdfReader
+
+from warehouse_structure import gerar_todos_casulos
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -235,29 +238,87 @@ def init_unified_db() -> None:
         );
         """
     )
+
+    # Migração automática: bancos criados antes dessa versão já têm
+    # warehouse_zones populada com as 4 zonas fictícias antigas (códigos
+    # "A"/"B"/"C"/"D"), então a checagem "tabela vazia?" logo abaixo nunca
+    # dispararia sozinha nesse banco — a estrutura física real nunca entraria.
+    # Detecta esse caso específico (qualquer zona com código que não comece
+    # com "Rua ") e limpa a estrutura antiga pra estrutura real ser recriada
+    # do zero a seguir. Junto, remove também qualquer estoque já lançado
+    # nesses casulos fictícios (não faz sentido preservar algo apontando
+    # pra uma zona que vai deixar de existir) — não mexe em nada além disso:
+    # tarefas, devoluções, expedição etc. continuam intactos.
+    zona_antiga = con.execute(
+        "SELECT 1 FROM warehouse_zones WHERE code NOT LIKE 'Rua %' LIMIT 1"
+    ).fetchone()
+    if zona_antiga:
+        con.execute("DELETE FROM stock_entries WHERE location_id IN (SELECT id FROM warehouse_locations)")
+        con.execute("DELETE FROM warehouse_locations")
+        con.execute("DELETE FROM warehouse_zones")
+        con.commit()
+
     if not con.execute("SELECT 1 FROM warehouse_zones LIMIT 1").fetchone():
-        zones = [
-            ("A", "Zona A — Giro alto", "Misto", 5000),
-            ("B", "Zona B — Grade", "Grade", 4500),
-            ("C", "Zona C — Saldo", "Saldo", 3500),
-            ("D", "Zona D — Reserva", "Misto", 2500),
-        ]
+        # Estrutura física REAL do CD (ESTRUTURA_CD/CAPACIDADE_FIXA_POR_RUA
+        # portados de app.py) — substitui o antigo placeholder de 4 zonas
+        # fictícias (A/B/C/D). Uma "zona" aqui é uma Rua real; cada
+        # warehouse_location é um casulo físico real (rua+coluna+lado+nível).
+        casulos = gerar_todos_casulos()
+
+        ruas_presentes = sorted(
+            {c["rua"] for c in casulos},
+            key=lambda r: int(r.split()[1]),
+        )
+        zone_capacity = {}
+        zone_gender = {}
+        for c in casulos:
+            zone_capacity[c["rua"]] = zone_capacity.get(c["rua"], 0) + c["capacidade"]
+            zone_gender[c["rua"]] = c["genero"]
+
         con.executemany(
             "INSERT INTO warehouse_zones(code,name,gender,capacity,created_at) VALUES(?,?,?,?,?)",
-            [(code, name, gender, capacity, now()) for code, name, gender, capacity in zones],
+            [
+                (rua, rua, zone_gender[rua], zone_capacity[rua], now())
+                for rua in ruas_presentes
+            ],
         )
         zone_ids = {r["code"]: r["id"] for r in con.execute("SELECT id,code FROM warehouse_zones")}
-        locations = []
-        for zone in "ABCD":
-            for column in range(1, 9):
-                for level in ("A", "B", "C"):
-                    address = f"{zone}-{column:03d}-{level}"
-                    locations.append((zone_ids[zone], address, zone, "UNICO", column, level, "CASULO", 100, now()))
+
+        locations = [
+            (
+                zone_ids[c["rua"]],
+                c["address"],
+                c["rua"],
+                c["lado"],
+                c["coluna"],
+                c["nivel"],
+                c["tipo_estrutural"],
+                c["capacidade"],
+                now(),
+            )
+            for c in casulos
+        ]
         con.executemany(
             """INSERT INTO warehouse_locations(zone_id,address,aisle,side,column_no,level_no,structure_type,capacity,updated_at)
                VALUES(?,?,?,?,?,?,?,?,?)""",
             locations,
         )
+
+        # Sinaliza (fora do schema, via unified_movements) quantos casulos
+        # ainda dependem do fallback genérico de capacidade (20), por não
+        # terem densidade fixa cadastrada para aquela combinação rua/tipo —
+        # mesmo comportamento documentado no app original, não um dado
+        # inventado por este script.
+        com_fallback = sum(1 for c in casulos if c["capacidade_estimada"])
+        if com_fallback:
+            add_movement(
+                con, "ESTOQUE", None, "SEED_ESTRUTURA_REAL",
+                f"Estrutura física real do CD carregada: {len(casulos)} casulos em "
+                f"{len(ruas_presentes)} ruas. {com_fallback} casulos ainda usam capacidade "
+                f"estimada (20) por falta de densidade fixa cadastrada para a combinação "
+                f"rua/tipo — revisar CAPACIDADE_FIXA_POR_RUA quando os dados reais chegarem.",
+                None,
+            )
     con.commit()
     con.close()
 
