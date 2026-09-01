@@ -1,3 +1,4 @@
+# Redeploy forcado em 2026-09-01 apos Railway ter deployado um commit antigo por engano
 from __future__ import annotations
 
 import io
