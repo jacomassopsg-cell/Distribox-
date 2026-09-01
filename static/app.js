@@ -1510,20 +1510,51 @@ function statusBadge(value) {
   return `<span class="badge ${cls}">${esc(String(value||"—").replaceAll("_"," "))}</span>`;
 }
 
+const WAREHOUSE_PAGE_SIZE = 200;
+let warehouseVisibleCount = WAREHOUSE_PAGE_SIZE;
+
 async function renderWarehouse() {
   setPage("Mapa e Capacidade", "Endereçamento físico, ocupação e guarda das mercadorias");
   const data=await api("/api/unified/warehouse"); unifiedCache.warehouse=data;
+  warehouseVisibleCount = WAREHOUSE_PAGE_SIZE;
   $("mainContent").innerHTML=`
     ${moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"warehouse")}
     <div class="zone-grid">${data.zones.map(z=>`<div class="zone-card"><div><small>Zona ${esc(z.code)}</small><b>${esc(z.name)}</b></div><strong>${z.occupancy}%</strong><div class="capacity-track"><i style="width:${Math.min(100,z.occupancy)}%"></i></div><span>${Number(z.occupied).toLocaleString("pt-BR")} / ${Number(z.capacity).toLocaleString("pt-BR")} peças</span></div>`).join("")}</div>
     <div class="panel"><div class="panel-header">Endereços do centro de distribuição <button class="primary small-btn" onclick="showStoreForm()">+ Guardar mercadoria</button></div>
       <div class="panel-body compact-filter"><div class="queue-search"><span>⌕</span><input id="warehouseSearch" placeholder="Endereço, categoria ou estrutura" oninput="filterWarehouseRows()"></div><select id="warehouseZone" onchange="filterWarehouseRows()"><option value="">Todas as zonas</option>${data.zones.map(z=>`<option>${esc(z.code)}</option>`).join("")}</select></div>
       <div id="storeForm" class="panel-body hidden"></div>
-      <div class="table-wrap warehouse-table"><table class="compact-table"><thead><tr><th>Endereço</th><th>Zona</th><th>Estrutura</th><th>Categoria</th><th>Ocupação</th><th>Disponível</th><th>Status</th></tr></thead><tbody>${data.locations.map(l=>`<tr class="warehouse-row" data-zone="${esc(l.zone_code)}" data-search="${esc(normalizeSearch([l.address,l.category,l.structure_type].join(' ')))}"><td><b>${esc(l.address)}</b></td><td>${esc(l.zone_code)}</td><td>${esc(l.structure_type||"—")}</td><td>${esc(l.category||"Livre")}</td><td><div class="inline-capacity"><i style="width:${Math.min(100,l.occupancy)}%"></i></div><small>${l.occupied_qty}/${l.capacity} • ${l.occupancy}%</small></td><td><b>${Math.max(0,l.capacity-l.occupied_qty)}</b></td><td>${statusBadge(l.status)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="table-wrap warehouse-table"><table class="compact-table"><thead><tr><th>Endereço</th><th>Zona</th><th>Estrutura</th><th>Categoria</th><th>Ocupação</th><th>Disponível</th><th>Status</th></tr></thead><tbody id="warehouseTableBody"></tbody></table></div>
+      <div id="warehousePager" class="panel-body"></div>
     </div>`;
+  renderWarehouseRows();
 }
 
-function filterWarehouseRows(){const term=normalizeSearch($("warehouseSearch")?.value||"");const zone=$("warehouseZone")?.value||"";document.querySelectorAll(".warehouse-row").forEach(r=>r.classList.toggle("hidden",(term&&!r.dataset.search.includes(term))||(zone&&r.dataset.zone!==zone)));}
+function warehouseRowHtml(l){return `<tr class="warehouse-row" data-zone="${esc(l.zone_code)}"><td><b>${esc(l.address)}</b></td><td>${esc(l.zone_code)}</td><td>${esc(l.structure_type||"—")}</td><td>${esc(l.category||"Livre")}</td><td><div class="inline-capacity"><i style="width:${Math.min(100,l.occupancy)}%"></i></div><small>${l.occupied_qty}/${l.capacity} • ${l.occupancy}%</small></td><td><b>${Math.max(0,l.capacity-l.occupied_qty)}</b></td><td>${statusBadge(l.status)}</td></tr>`;}
+
+// Mostra os casulos em lotes (WAREHOUSE_PAGE_SIZE por vez) em vez de montar
+// a tabela inteira de uma só vez — com a estrutura física real (quase
+// 19.600 casulos), renderizar tudo junto travava o navegador. A lista
+// completa continua em memória (unifiedCache.warehouse), só a exibição é
+// que fica em lotes.
+function renderWarehouseRows(){
+  const data=unifiedCache.warehouse; if(!data) return;
+  const term=normalizeSearch($("warehouseSearch")?.value||"");
+  const zone=$("warehouseZone")?.value||"";
+  const filtrados=data.locations.filter(l=>{
+    const bateZona = !zone || l.zone_code===zone;
+    const bateBusca = !term || normalizeSearch([l.address,l.category,l.structure_type].join(' ')).includes(term);
+    return bateZona && bateBusca;
+  });
+  const visiveis=filtrados.slice(0,warehouseVisibleCount);
+  $("warehouseTableBody").innerHTML = visiveis.length ? visiveis.map(warehouseRowHtml).join("") : `<tr><td colspan="7" class="empty-cell">Nenhum casulo encontrado.</td></tr>`;
+  const restantes=filtrados.length-visiveis.length;
+  $("warehousePager").innerHTML = `<span class="muted">Mostrando ${visiveis.length.toLocaleString('pt-BR')} de ${filtrados.length.toLocaleString('pt-BR')} casulos</span>` +
+    (restantes>0 ? ` <button class="secondary small-btn" onclick="loadMoreWarehouseRows()">Carregar mais ${Math.min(restantes,WAREHOUSE_PAGE_SIZE).toLocaleString('pt-BR')}</button>` : "");
+}
+
+function loadMoreWarehouseRows(){warehouseVisibleCount += WAREHOUSE_PAGE_SIZE; renderWarehouseRows();}
+
+function filterWarehouseRows(){warehouseVisibleCount = WAREHOUSE_PAGE_SIZE; renderWarehouseRows();}
 
 function showStoreForm(){const data=unifiedCache.warehouse;const free=data.locations.filter(l=>l.status!=="BLOQUEADO"&&l.occupied_qty<l.capacity);$("storeForm").classList.remove("hidden");$("storeForm").innerHTML=`<div class="inline-form"><div class="field"><label>Endereço</label><select id="storeLocation"><option value="">Selecione</option>${free.map(l=>`<option value="${l.id}">${esc(l.address)} • livre ${l.capacity-l.occupied_qty}</option>`).join("")}</select></div><div class="field"><label>ID do Card</label><input id="storeCard" type="number" placeholder="Opcional"></div><div class="field"><label>Quantidade</label><input id="storeQty" type="number" min="1"></div><div class="field"><label>Marca / categoria</label><input id="storeBrand" placeholder="Marca ou grupo"></div><button class="success" onclick="storeMaterial()">Confirmar guarda</button></div>`;}
 async function storeMaterial(){try{await api("/api/unified/warehouse/store",{method:"POST",body:JSON.stringify({user_id:currentUser.id,location_id:Number($("storeLocation").value),card_id:Number($("storeCard").value||0),quantity:Number($("storeQty").value),brand:$("storeBrand").value,category:$("storeBrand").value})});toast("Mercadoria guardada e capacidade atualizada.");renderWarehouse();}catch(e){toast(e.message)}}
