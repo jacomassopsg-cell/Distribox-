@@ -107,3 +107,12 @@ table{color:#e7eef6}.table-wrap{background:transparent}th{background:#0b1d30;col
 @media(max-width:760px){.app-shell{grid-template-columns:1fr}.sidebar{display:none}.hero-kpis{grid-template-columns:1fr 1fr}.hero-card{min-height:135px}.hero-card span{font-size:12px}.hero-card strong{font-size:29px}.hero-card em{margin-top:15px}.hero-icon{width:50px;height:50px;font-size:24px}.topbar h2{font-size:18px}.top-icon{display:none}.dash-row{grid-template-columns:1fr}.registrations-grid,.settings-grid,.simulator-form{grid-template-columns:1fr}.simulation-result{grid-column:auto}.selection-bar{left:14px}.flow-strip{padding:13px}.flow-strip button{min-width:90px}}
 .kpi,.zone-card{background:linear-gradient(145deg,#0e2238,#0a1b2d);color:#f3f7fb;border-color:#294058}.kpi-label,.kpi-hint,.zone-card small,.zone-card>span{color:#94a7bc}.summary-box{color:#e7eef6}
 .brand-block small{display:inline-block;margin-left:7px;padding:2px 5px;border:1px solid #43586d;border-radius:4px;color:#8fa2b8;font-size:8px;vertical-align:middle}
+.metric-row-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.warehouse-pager{display:flex;align-items:center;justify-content:space-between;color:#91a4b8}
+.heatmap-street{margin-bottom:16px;overflow:hidden}.heatmap-street .panel-header small{margin-left:auto;color:#91a4b8}
+.heatmap-sides{display:grid;grid-template-columns:1fr 1fr;gap:16px}.heatmap-side-title{font-size:11px;font-weight:800;color:#9fb1c5;text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px}
+.heatmap-grid{display:flex;flex-wrap:wrap;gap:6px;padding:13px;background:#071827;border:1px solid #294058;border-radius:8px;min-height:48px}
+.heatmap-box{width:32px;height:32px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:9px;font-weight:800;box-shadow:0 2px 6px #0006,inset 0 1px #ffffff35;transition:transform .12s ease,box-shadow .12s ease}.heatmap-box:hover{transform:translateY(-2px) scale(1.1);box-shadow:0 7px 14px #0008;z-index:2}
+.heatmap-sequential{margin-top:16px;padding-top:16px;border-top:1px solid #294058}.heatmap-sequential .heatmap-grid{background:#2a240d;border-color:#725f20}
+.heatmap-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:14px;padding:11px 15px;background:#091c30;border:1px solid #294058;border-radius:8px;color:#a8b8c9;font-size:11px}.heatmap-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:middle}
+@media(max-width:900px){.heatmap-sides,.metric-row-2{grid-template-columns:1fr}}
