@@ -266,7 +266,7 @@ function productionQueueRow(card,tab="processing") {
   const searchable = [card.purchase_id,card.supplier,card.brand,card.casulo_current,card.original_type,card.material_search].join(" ").toLowerCase();
   const activity = card.status === "EM_PROCESSAMENTO" ? "ATIVO" : card.status === "PROCESSAMENTO_PAUSADO" ? "PAUSADO" : "AGUARDANDO";
   return `<tr class="production-material-row" tabindex="0" data-id="${card.id}" data-label="${esc(card.purchase_id)} — ${esc(card.brand||card.supplier||'Sem marca')}" data-search="${esc(searchable)}" data-type="${esc(card.purchase_mode||'')}" data-status="${activity}" data-brand="${esc(card.brand||'')}" onclick="selectProductionMaterial(${card.id})" ondblclick="openCard(${card.id},'${tab}')" onkeydown="if(event.key==='Enter')openCard(${card.id},'${tab}')">
-    <td class="select-col"><span class="row-selector"></span></td><td><b>${esc(card.purchase_id)}</b><small>${esc(card.original_type||'')}</small></td><td>${esc(card.supplier||"—")}</td><td>${esc(card.brand||"—")}</td><td><span class="type-pill">${card.purchase_mode === "GRADE" ? "Grade" : "Saldo"}</span></td><td>${card.item_count}</td><td><b>${card.expected_total}</b></td><td>${esc(card.casulo_current||"—")}</td><td><span class="badge ${statusClass(card.status)}">${esc(card.status_label)}</span></td><td><button class="row-open" onclick="event.stopPropagation();openCard(${card.id},'processing')" aria-label="Abrir material">›</button></td></tr>`;
+    <td class="select-col"><span class="row-selector"></span></td><td><b>${esc(card.purchase_id)}</b><small>${esc(card.original_type||'')}</small></td><td>${esc(card.supplier||"—")}</td><td>${esc(card.brand||"—")}</td><td><span class="type-pill">${card.purchase_mode === "GRADE" ? "Grade" : "Saldo"}</span></td><td>${card.item_count}</td><td><b>${card.expected_total}</b></td><td>${esc(card.casulo_current||"—")}</td><td><span class="badge ${statusClass(card.status)}">${esc(card.status_label)}</span></td><td><button class="row-open" onclick="event.stopPropagation();openCard(${card.id},'${tab}')" aria-label="Abrir material">›</button></td></tr>`;
 }
 
 function filterProductionQueue() {
@@ -1199,8 +1199,17 @@ async function renderProcessingTab() {
     return;
   }
   const p = cardData.processing;
+  const importedProcessingItems = (cardData.items||[]).filter((item)=>["AGUARDANDO_PROCESSAMENTO","PROCESSAMENTO"].includes(item.source_stage));
   if (cardData.source_snapshot_at && !p && cardData.current_sector !== "PROCESSAMENTO") {
-    renderImportedSectorSnapshot("tabProcessingBtn",["AGUARDANDO_PROCESSAMENTO","PROCESSAMENTO"],"Itens localizados no Processamento");
+    if (importedProcessingItems.length && canOperateProcessing()) {
+      $("cardTab").innerHTML = processingSetupHtml(importedProcessingItems);
+      toggleProcessingLabelField();
+    } else {
+      renderImportedSectorSnapshot("tabProcessingBtn",["AGUARDANDO_PROCESSAMENTO","PROCESSAMENTO"],"Itens localizados no Processamento");
+      if (importedProcessingItems.length) {
+        $("cardTab").insertAdjacentHTML("afterbegin",'<div class="notice warn"><b>Para produzir:</b> saia deste perfil e entre como operador do Processamento, Supervisor ou Administrador.</div>');
+      }
+    }
     return;
   }
   if (cardData.current_sector === "PROCESSAMENTO" && !p) {
@@ -1220,10 +1229,19 @@ async function renderProcessingTab() {
   toggleProcessingLabelField();
 }
 
-function processingSetupHtml() {
+function processingSetupHtml(importedItems=[]) {
   const modeLabel = cardData.purchase_mode === "GRADE" ? "Grade — importado como Private Label" : cardData.purchase_mode === "SALDO" ? "Saldo" : "Tipo não reconhecido";
+  const imported = importedItems.length > 0;
+  const importedQty = importedItems.reduce((sum,item)=>sum+Number(item.expected_qty||0),0);
+  const importedPicker = !imported ? "" : cardData.purchase_mode === "GRADE" ? `
+    <div class="notice success-box"><b>Selecione os tamanhos que entrarão nesta produção.</b><br>Somente os itens posicionados em Aguardando Processamento serão movimentados. Os demais permanecem nos setores atuais.</div>
+    <div class="table-wrap compact-picker"><table class="compact-table"><thead><tr><th class="check-col"><input id="processingImportedAll" type="checkbox" checked onchange="toggleImportedProcessingItems(this.checked)"></th><th>Produto</th><th>Cor</th><th>Tamanho</th><th>Quantidade</th></tr></thead><tbody>
+      ${importedItems.map((item)=>`<tr><td><input class="processing-import-item" type="checkbox" value="${item.id}" checked onchange="updateImportedProcessingSummary()"></td><td><b>${esc(item.product||'—')}</b><small>${esc(item.reference||item.sku||'')}</small></td><td>${esc(item.color||'—')}</td><td><span class="size-token">${esc(item.size||'—')}</span></td><td><b>${item.expected_qty}</b></td></tr>`).join("")}
+    </tbody></table></div><div id="processingImportedSummary" class="queue-counter"><b>${importedItems.length}</b> tamanho(s) • <b>${importedQty}</b> peça(s) selecionada(s)</div>` : `
+    <div class="notice success-box"><b>Saldo disponível para produção</b><br>${importedItems.length} linha(s), total de ${importedQty} peça(s). O apontamento continuará por quantidade geral.</div>`;
   return `<div class="panel-body">
-    <div class="notice"><b>Configuração inicial do Processamento</b><br>O tipo da compra vem automaticamente do Excel e não pode ser alterado neste setor.</div>
+    <div class="notice"><b>Configuração inicial do Processamento</b><br>O tipo da compra vem automaticamente do Excel e não pode ser alterado neste setor.${imported ? " O Card-mãe continuará no Recebimento porque esta compra possui itens em etapas diferentes." : ""}</div>
+    ${importedPicker}
     <div class="form-grid">
       <div class="field"><label>Tipo da compra</label><input class="readonly" readonly value="${esc(modeLabel)}"></div>
       <div class="field"><label>Marca</label><input id="processingBrand" value="${esc(cardData.brand||"")}" placeholder="Informe a marca"></div>
@@ -1247,6 +1265,9 @@ async function createProcessing() {
   try {
     const triage = $("processingNeedsTriage").value;
     const labeling = $("processingNeedsLabeling").value;
+    const importedChecks = [...document.querySelectorAll(".processing-import-item")];
+    const itemIds = importedChecks.filter((input)=>input.checked).map((input)=>Number(input.value));
+    if (importedChecks.length && !itemIds.length) throw new Error("Selecione pelo menos um tamanho para produzir.");
     await api(`/api/cards/${currentCardId}/processing`, {
       method: "POST",
       body: JSON.stringify({
@@ -1258,12 +1279,16 @@ async function createProcessing() {
         label_type: $("processingLabelType")?.value || null,
         quantity_deferred_to_storage: Boolean($("processingDeferQty")?.checked),
         notes: $("processingNotes").value,
+        item_ids: itemIds,
       }),
     });
     toast("Processamento configurado.");
     await openCard(currentCardId, "processing");
   } catch (error) { toast(error.message); }
 }
+
+function toggleImportedProcessingItems(checked){document.querySelectorAll(".processing-import-item").forEach((input)=>input.checked=checked);updateImportedProcessingSummary();}
+function updateImportedProcessingSummary(){const selected=[...document.querySelectorAll(".processing-import-item:checked")];const ids=new Set(selected.map((input)=>Number(input.value)));const items=(cardData.items||[]).filter((item)=>ids.has(item.id));const qty=items.reduce((sum,item)=>sum+Number(item.expected_qty||0),0);if($("processingImportedSummary"))$("processingImportedSummary").innerHTML=`<b>${items.length}</b> tamanho(s) • <b>${qty}</b> peça(s) selecionada(s)`;if($("processingImportedAll"))$("processingImportedAll").checked=selected.length===document.querySelectorAll(".processing-import-item").length;}
 
 function processingDetailHtml(p) {
   const isOpen = p.status === "ABERTO";
