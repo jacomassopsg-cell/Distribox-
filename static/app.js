@@ -1622,15 +1622,29 @@ async function renderWarehouseHeatmap() {
     </div>`;
   };
   // Mesma convenção física do OutLog-Distribox: coluna ímpar no lado
-  // esquerdo, par no lado direito — como é de verdade no barracão.
+  // esquerdo, par no lado direito. O trecho sequencial (hoje só a Rua 02,
+  // colunas 103-139) vem separado num terceiro bloco, de largura total,
+  // igual o original — não é nem ímpar nem par de verdade fisicamente.
   const secoes = (data.ruas || []).map((r) => {
-    const impares = r.colunas.filter((c) => c.lado === "impar").sort((a, b) => a.coluna - b.coluna);
-    const pares = r.colunas.filter((c) => c.lado === "par").sort((a, b) => a.coluna - b.coluna);
+    const impares = r.colunas.filter((c) => c.secao === "impar").sort((a, b) => a.coluna - b.coluna);
+    const pares = r.colunas.filter((c) => c.secao === "par").sort((a, b) => a.coluna - b.coluna);
+    const sequenciais = r.colunas.filter((c) => c.secao === "sequencial").sort((a, b) => a.coluna - b.coluna);
+    const blocoSeq = sequenciais.length ? `
+      <div class="heatmap-seq-divider"></div>
+      <div class="heatmap-lado heatmap-lado-seq">
+        <div class="heatmap-lado-titulo">Trecho Sequencial <small>(colunas ${sequenciais[0].coluna} a ${sequenciais[sequenciais.length - 1].coluna})</small></div>
+        <div class="heatmap-grid">
+          ${sequenciais.map((c) => `<div class="heatmap-box" style="background:${corPorOcupacaoHeatmap(c.ocupacao_pct)}" title="Coluna ${c.coluna} — ${c.ocupado}/${c.capacidade} peças (${c.ocupacao_pct}%), ${c.niveis} nível(is)">${c.coluna}</div>`).join("")}
+        </div>
+      </div>` : "";
     return `<div class="panel heatmap-rua">
       <div class="panel-header">${esc(r.rua)} <small>${r.colunas.length} coluna(s)</small></div>
-      <div class="panel-body heatmap-lados">
-        ${blocoLado(impares, "◀ Lado Ímpar")}
-        ${blocoLado(pares, "Lado Par ▶")}
+      <div class="panel-body">
+        <div class="heatmap-lados">
+          ${blocoLado(impares, "◀ Lado Ímpar")}
+          ${blocoLado(pares, "Lado Par ▶")}
+        </div>
+        ${blocoSeq}
       </div>
     </div>`;
   }).join("");
