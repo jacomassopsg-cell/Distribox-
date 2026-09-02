@@ -487,7 +487,7 @@ function renderReceivingTab() {
     window.setTimeout(refreshTimerDisplay, 500);
     return;
   }
-  if (cardData.status === "EM_COSTURA_CD01") {
+  if (cardData.status === "EM_COSTURA_CD01" || cardData.receiving?.receiving_type === "COSTURA") {
     $("cardTab").innerHTML = inCosturaHtml();
     return;
   }
@@ -530,6 +530,9 @@ function outsideReceivingHtml() {
 
 function inCosturaHtml() {
   const d = cardData.dispatch;
+  const r = cardData.receiving;
+  const operate = canOperateReceiving();
+  const productionDone = r?.ten_percent_status === "CONCLUIDA";
   return `<div class="panel-body">
     <div class="notice success-box"><b>Mercadoria em Costura — CD01</b><br>O Card permanece na aba Recebimento para acompanhamento até o retorno da mercadoria.</div>
     <div class="form-grid">
@@ -543,9 +546,30 @@ function inCosturaHtml() {
       <div class="field"><label>Previsão de retorno</label><input class="readonly" readonly value="${fmtDate(d?.return_forecast)}"></div>
       <div class="field full"><label>Observações do despacho</label><textarea class="readonly" readonly>${esc(d?.notes || "")}</textarea></div>
     </div>
-    <div class="notice warn">Aguardando o retorno da Costura. Quando a mercadoria retornar, o mesmo Card mudará para <b>Aguardando recebimento do retorno</b>.</div>
+    ${r ? costuraProductionHtml(r, productionDone, operate) : '<div class="notice warn">O controle de produção da Costura será criado automaticamente na próxima atualização do relatório.</div>'}
+    <div class="notice warn">Aguardando o retorno da Costura. Quando a mercadoria retornar, será aberto um novo controle de recebimento e uma nova tiragem de 10%, sem perder este acompanhamento.</div>
     ${currentUser.role === "admin" ? `<div class="actions"><button class="success" onclick="simulateReturn(${cardData.id})">Registrar retorno CD01 — teste</button></div>` : ""}
   </div>`;
+}
+
+function samplePlanTable(r, title) {
+  const rows = r.sample_plan || [];
+  if (!rows.length) return "";
+  return `<h3 class="section-heading">${esc(title)}</h3>
+    <div class="notice"><b>Distribuição automática por cor e tamanho.</b><br>O total de peças é dividido com a mesma regra da Qualidade. Para Grade, cada combinação recebe pelo menos uma peça e a soma fecha exatamente a meta prevista de 10%.</div>
+    <div class="table-wrap compact-picker"><table class="compact-table"><thead><tr><th>Produto</th><th>Referência</th><th>Cor</th><th>Tamanho</th><th>Qtd. total</th><th>Retirar nos 10%</th></tr></thead><tbody>
+      ${rows.map((item)=>`<tr><td><b>${esc(item.product||"—")}</b></td><td>${esc(item.reference||item.sku||"—")}</td><td>${esc(item.color||"Geral")}</td><td><span class="size-token">${esc(item.size||"Geral")}</span></td><td>${item.expected_qty}</td><td><b>${item.sample_qty}</b></td></tr>`).join("")}
+    </tbody><tfoot><tr><td colspan="5"><b>Total previsto da tiragem</b></td><td><b>${rows.reduce((sum,item)=>sum+Number(item.sample_qty||0),0)}</b></td></tr></tfoot></table></div>`;
+}
+
+function costuraProductionHtml(r, productionDone, operate) {
+  const timer = r.timer || {state:"NAO_INICIADA",business_seconds:0,paused_seconds:0,permanence_seconds:0};
+  return `<h3 class="section-heading">Controle de produção — Costura</h3>
+    <div class="timer-card">
+      <div class="form-grid"><div class="field"><label>Quantidade prevista na Costura</label><input class="readonly" readonly value="${(r.operation_items||[]).reduce((sum,item)=>sum+Number(item.expected_qty||0),0)||cardData.expected_total}"></div><div class="field"><label>Quantidade produzida</label><input id="sampleActual" type="number" min="0" ${operate&&!productionDone?"":"readonly"} value="${r.ten_percent_actual??""}"></div></div>
+      <div class="timer-grid" style="margin-top:11px"><div class="timer-value"><span>Status</span><strong>${esc(timer.state)}</strong></div><div class="timer-value"><span>Tempo útil</span><strong>${fmtSeconds(timer.business_seconds)}</strong></div><div class="timer-value"><span>Tempo parado</span><strong>${fmtSeconds(timer.paused_seconds)}</strong></div><div class="timer-value"><span>Permanência</span><strong>${fmtSeconds(timer.permanence_seconds)}</strong></div></div>
+      <div class="actions">${operate&&!productionDone&&timer.state==="NAO_INICIADA"?'<button class="primary" onclick="sampleAction(\'start\')">Iniciar produção</button>':""}${operate&&!productionDone&&timer.state==="EM_ANDAMENTO"?'<button class="warning" onclick="sampleAction(\'pause\')">Pausar</button><button class="success" onclick="sampleAction(\'finish\')">Concluir produção</button>':""}${operate&&!productionDone&&timer.state==="PAUSADA"?'<button class="primary" onclick="sampleAction(\'resume\')">Retomar</button><button class="success" onclick="sampleAction(\'finish\')">Concluir produção</button>':""}${productionDone?'<span class="badge green">Produção concluída</span>':'<span class="badge orange">Produção em acompanhamento</span>'}</div>
+    </div>${samplePlanTable(r,"Previsão da tiragem de 10% no retorno")}`;
 }
 
 function receivingFormHtml(isReturn) {
@@ -559,8 +583,8 @@ function receivingFormHtml(isReturn) {
   const operationItems = r.operation_items || [];
   return `
     <div class="panel-body">
-      <div class="notice ${isReturn ? "success-box" : ""}"><b>${isReturn ? "Recebimento do retorno CD01" : "Recebimento de mercadoria nova"}</b><br>${isReturn ? "Registre o retorno e separe uma nova amostra de 10%. O Card só segue para a Inspeção 2 quando as duas partes terminarem." : "O recebimento físico e a separação dos 10% com triagem inicial podem ser concluídos em qualquer ordem. O Card só segue para a Qualidade quando ambos terminarem."}</div>
-      ${isReturn && operationItems.length ? `<div class="notice"><b>${operationItems.length} item(ns) retornaram da Costura</b><br>O recebimento e a nova tiragem de 10% considerarão somente estes itens. Os demais itens da compra permanecerão em suas etapas atuais.</div><div class="table-wrap compact-picker"><table class="compact-table"><thead><tr><th>Produto</th><th>Referência</th><th>Cor</th><th>Tamanho</th><th>Qtd. retornada prevista</th></tr></thead><tbody>${operationItems.map((item)=>`<tr><td><b>${esc(item.product||"—")}</b></td><td>${esc(item.reference||item.sku||"—")}</td><td>${esc(item.color||"—")}</td><td><span class="size-token">${esc(item.size||"—")}</span></td><td><b>${item.expected_qty}</b></td></tr>`).join("")}</tbody></table></div>` : ""}
+      <div class="notice ${isReturn ? "success-box" : ""}"><b>${isReturn ? "Recebimento do retorno CD01" : "Recebimento de mercadoria em trânsito"}</b><br>${isReturn ? "Registre o retorno e separe uma nova amostra de 10%. O Card só segue para a Inspeção 2 quando as duas partes terminarem." : "O recebimento físico e a separação dos 10% com triagem inicial podem ser concluídos em qualquer ordem. O Card só segue para a Qualidade quando ambos terminarem."}</div>
+      ${operationItems.length ? `<div class="notice"><b>${operationItems.length} item(ns) fazem parte deste controle</b><br>Somente estes itens serão movimentados. Os demais itens da compra permanecerão em suas etapas atuais.</div>` : ""}
       <h3 class="section-heading">Recebimento físico</h3>
       <div class="form-grid">
         <div class="field"><label>Volumes</label><input id="recVolumes" type="number" min="0" ${readOnly} value="${r.volumes ?? ""}"></div>
@@ -574,6 +598,7 @@ function receivingFormHtml(isReturn) {
         ${physicalDone ? '<span class="badge green">Recebimento físico concluído</span>' : '<span class="badge gray">Recebimento físico pendente</span>'}
       </div>
       <div class="photos">${receivingPhotos.map((p,i)=>`<a class="photo-link" target="_blank" href="${p}">Arquivo ${i+1}</a>`).join("")}</div>
+      ${samplePlanTable(r,isReturn?"Plano exato da nova tiragem de 10%":"Plano exato da tiragem de 10%")}
       ${sampleHtml(r, sampleDone, operate, isReturn)}
     </div>`;
 }
@@ -671,7 +696,7 @@ async function sampleAction(action) {
       })});
     }
     await api(`/api/receivings/${cardData.receiving.id}/timer/${action}`, { method:"POST", body:JSON.stringify({ user_id:currentUser.id }) });
-    toast("Atividade dos 10% atualizada.");
+    toast(cardData.receiving?.receiving_type === "COSTURA" ? "Controle de produção da Costura atualizado." : "Atividade dos 10% atualizada.");
     await openCard(currentCardId);
   } catch (error) { toast(error.message); }
 }
