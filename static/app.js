@@ -96,7 +96,7 @@ function setPage(title, subtitle) {
 }
 
 function activeNav(view) {
-  const parent = ({storage:"storage-hub",warehouse:"storage-hub","stock-stats":"storage-hub","capacity-simulator":"storage-hub",returns:"returns-hub","return-indicators":"returns-hub","return-history":"returns-hub",sgo:"sgo-indicators",tasks:"sgo-indicators",import:"sgo-indicators",test:"settings"})[view] || view;
+  const parent = ({storage:"storage-hub",warehouse:"storage-hub","warehouse-heatmap":"storage-hub","stock-stats":"storage-hub","capacity-simulator":"storage-hub",returns:"returns-hub","return-indicators":"returns-hub","return-history":"returns-hub",sgo:"sgo-indicators",tasks:"sgo-indicators",import:"sgo-indicators",test:"settings"})[view] || view;
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === parent);
   });
@@ -114,6 +114,7 @@ async function goTo(view) {
     if (view === "storage") await renderCards("storage");
     if (view === "storage-hub") await renderStorageHub();
     if (view === "warehouse") await renderWarehouse();
+    if (view === "warehouse-heatmap") await renderWarehouseHeatmap();
     if (view === "stock-stats") await renderStockStatistics();
     if (view === "capacity-simulator") await renderCapacitySimulator();
     if (view === "sgo") await renderSgo();
@@ -217,6 +218,23 @@ async function renderDashboardLegacy() {
     </div>`;
 }
 
+function metricCardsHtml(scope, totals) {
+  if (scope === "receiving") {
+    const qty = Number(totals.receiving_qty || 0), capacity = Number(totals.warehouse_capacity || 0);
+    const percentage = capacity ? (qty * 100 / capacity).toFixed(1) : "0.0";
+    return `<div class="metric-row-2"><div class="kpi"><div class="kpi-label">Peças aguardando recebimento</div><div class="kpi-value">${qty.toLocaleString("pt-BR")}</div></div><div class="kpi"><div class="kpi-label">% da capacidade real do CD</div><div class="kpi-value">${percentage}%</div></div></div>`;
+  }
+  if (scope === "quality") {
+    const qty = Number(totals.quality_qty || 0), total = Number(totals.quality || 0), active = Number(totals.quality_in_progress || 0);
+    return `<div class="metric-row-2"><div class="kpi"><div class="kpi-label">Peças em Qualidade</div><div class="kpi-value">${qty.toLocaleString("pt-BR")}</div></div><div class="kpi"><div class="kpi-label">% em inspeção ativa</div><div class="kpi-value">${total?(active*100/total).toFixed(1):"0.0"}%</div></div></div>`;
+  }
+  if (scope === "processing") {
+    const qty = Number(totals.processing_qty || 0), total = Number(totals.processing || 0), active = Number(totals.processing_in_progress || 0);
+    return `<div class="metric-row-2"><div class="kpi"><div class="kpi-label">Peças em Processamento</div><div class="kpi-value">${qty.toLocaleString("pt-BR")}</div></div><div class="kpi"><div class="kpi-label">% em execução ativa</div><div class="kpi-value">${total?(active*100/total).toFixed(1):"0.0"}%</div></div></div>`;
+  }
+  return "";
+}
+
 async function renderCards(scope) {
   const quality = scope === "quality";
   const processing = scope === "processing";
@@ -225,9 +243,11 @@ async function renderCards(scope) {
   const subtitle = quality ? "Inspeção ágil e preenchimento guiado" : processing ? "Seleção compacta de materiais" : labeling ? "Grade por tamanho; Saldo por quantidade" : storage ? "Entrada em estoque por tamanho ou saldo geral" : "Controle geral da produção e posição real de cada item";
   setPage(title, subtitle);
   const cards = await api(`/api/cards?scope=${scope}`);
+  const metrics = ["receiving","quality","processing"].includes(scope)
+    ? metricCardsHtml(scope, (await api("/api/dashboard")).totals) : "";
   if (["receiving","quality","processing","labeling","storage"].includes(scope)) {
-    const tabs = storage ? moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"storage") : "";
-    $("mainContent").innerHTML = tabs + processingQueueHtml(cards, scope);
+    const tabs = storage ? moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Mapa de Calor","warehouse-heatmap"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"storage") : "";
+    $("mainContent").innerHTML = tabs + metrics + processingQueueHtml(cards, scope);
     filterProductionQueue();
     return;
   }
@@ -1590,20 +1610,58 @@ function statusBadge(value) {
   return `<span class="badge ${cls}">${esc(String(value||"—").replaceAll("_"," "))}</span>`;
 }
 
+const WAREHOUSE_PAGE_SIZE = 200;
+let warehouseVisibleCount = WAREHOUSE_PAGE_SIZE;
+
 async function renderWarehouse() {
   setPage("Mapa e Capacidade", "Endereçamento físico, ocupação e guarda das mercadorias");
   const data=await api("/api/unified/warehouse"); unifiedCache.warehouse=data;
+  warehouseVisibleCount = WAREHOUSE_PAGE_SIZE;
   $("mainContent").innerHTML=`
-    ${moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"warehouse")}
+    ${moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Mapa de Calor","warehouse-heatmap"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"warehouse")}
     <div class="zone-grid">${data.zones.map(z=>`<div class="zone-card"><div><small>Zona ${esc(z.code)}</small><b>${esc(z.name)}</b></div><strong>${z.occupancy}%</strong><div class="capacity-track"><i style="width:${Math.min(100,z.occupancy)}%"></i></div><span>${Number(z.occupied).toLocaleString("pt-BR")} / ${Number(z.capacity).toLocaleString("pt-BR")} peças</span></div>`).join("")}</div>
     <div class="panel"><div class="panel-header">Endereços do centro de distribuição <button class="primary small-btn" onclick="showStoreForm()">+ Guardar mercadoria</button></div>
       <div class="panel-body compact-filter"><div class="queue-search"><span>⌕</span><input id="warehouseSearch" placeholder="Endereço, categoria ou estrutura" oninput="filterWarehouseRows()"></div><select id="warehouseZone" onchange="filterWarehouseRows()"><option value="">Todas as zonas</option>${data.zones.map(z=>`<option>${esc(z.code)}</option>`).join("")}</select></div>
       <div id="storeForm" class="panel-body hidden"></div>
-      <div class="table-wrap warehouse-table"><table class="compact-table"><thead><tr><th>Endereço</th><th>Zona</th><th>Estrutura</th><th>Categoria</th><th>Ocupação</th><th>Disponível</th><th>Status</th></tr></thead><tbody>${data.locations.map(l=>`<tr class="warehouse-row" data-zone="${esc(l.zone_code)}" data-search="${esc(normalizeSearch([l.address,l.category,l.structure_type].join(' ')))}"><td><b>${esc(l.address)}</b></td><td>${esc(l.zone_code)}</td><td>${esc(l.structure_type||"—")}</td><td>${esc(l.category||"Livre")}</td><td><div class="inline-capacity"><i style="width:${Math.min(100,l.occupancy)}%"></i></div><small>${l.occupied_qty}/${l.capacity} • ${l.occupancy}%</small></td><td><b>${Math.max(0,l.capacity-l.occupied_qty)}</b></td><td>${statusBadge(l.status)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="table-wrap warehouse-table"><table class="compact-table"><thead><tr><th>Endereço</th><th>Zona</th><th>Estrutura</th><th>Categoria</th><th>Ocupação</th><th>Disponível</th><th>Status</th></tr></thead><tbody id="warehouseTableBody"></tbody></table></div>
+      <div id="warehousePager" class="panel-body warehouse-pager"></div>
     </div>`;
+  renderWarehouseRows();
 }
 
-function filterWarehouseRows(){const term=normalizeSearch($("warehouseSearch")?.value||"");const zone=$("warehouseZone")?.value||"";document.querySelectorAll(".warehouse-row").forEach(r=>r.classList.toggle("hidden",(term&&!r.dataset.search.includes(term))||(zone&&r.dataset.zone!==zone)));}
+function warehouseRowHtml(location){return `<tr class="warehouse-row"><td><b>${esc(location.address)}</b></td><td>${esc(location.zone_code)}</td><td>${esc(location.structure_type||"—")}</td><td>${esc(location.category||"Livre")}</td><td><div class="inline-capacity"><i style="width:${Math.min(100,location.occupancy)}%"></i></div><small>${location.occupied_qty}/${location.capacity} • ${location.occupancy}%</small></td><td><b>${Math.max(0,location.capacity-location.occupied_qty)}</b></td><td>${statusBadge(location.status)}</td></tr>`;}
+
+function renderWarehouseRows(){
+  const data=unifiedCache.warehouse;if(!data)return;
+  const term=normalizeSearch($("warehouseSearch")?.value||""),zone=$("warehouseZone")?.value||"";
+  const filtered=data.locations.filter(location=>(!zone||location.zone_code===zone)&&(!term||normalizeSearch([location.address,location.category,location.structure_type].join(" ")).includes(term)));
+  const visible=filtered.slice(0,warehouseVisibleCount),remaining=filtered.length-visible.length;
+  $("warehouseTableBody").innerHTML=visible.length?visible.map(warehouseRowHtml).join(""):'<tr><td colspan="7" class="empty-cell">Nenhum casulo encontrado.</td></tr>';
+  $("warehousePager").innerHTML=`<span>Mostrando ${visible.length.toLocaleString("pt-BR")} de ${filtered.length.toLocaleString("pt-BR")} casulos</span>${remaining>0?`<button class="secondary small-btn" onclick="loadMoreWarehouseRows()">Carregar mais ${Math.min(remaining,WAREHOUSE_PAGE_SIZE).toLocaleString("pt-BR")}</button>`:""}`;
+}
+function loadMoreWarehouseRows(){warehouseVisibleCount+=WAREHOUSE_PAGE_SIZE;renderWarehouseRows();}
+function filterWarehouseRows(){warehouseVisibleCount=WAREHOUSE_PAGE_SIZE;renderWarehouseRows();}
+
+function heatmapColor(percentage){
+  if(percentage>=90)return "#d92d20";
+  if(percentage>=60)return "#e98b08";
+  if(percentage>=25)return "#f5c400";
+  if(percentage>0)return "#16803c";
+  return "#2a3646";
+}
+
+async function renderWarehouseHeatmap(){
+  setPage("Mapa de Calor","Ocupação por Rua e coluna");
+  const data=await api("/api/unified/warehouse/heatmap");
+  const sideBlock=(columns,title)=>`<div class="heatmap-side"><div class="heatmap-side-title">${title}</div><div class="heatmap-grid">${columns.map(column=>`<div class="heatmap-box" style="background:${heatmapColor(column.ocupacao_pct)}" title="Coluna ${column.coluna} — ${column.ocupado}/${column.capacidade} peças (${column.ocupacao_pct}%)">${column.coluna}</div>`).join("")||'<span class="empty-visual">Sem posições</span>'}</div></div>`;
+  const streets=(data.ruas||[]).map(street=>{
+    const odd=street.colunas.filter(column=>column.secao==="impar").sort((a,b)=>a.coluna-b.coluna);
+    const even=street.colunas.filter(column=>column.secao==="par").sort((a,b)=>a.coluna-b.coluna);
+    const sequential=street.colunas.filter(column=>column.secao==="sequencial").sort((a,b)=>a.coluna-b.coluna);
+    return `<section class="panel heatmap-street"><div class="panel-header">${esc(street.rua)} <small>${street.colunas.length} colunas</small></div><div class="panel-body"><div class="heatmap-sides">${sideBlock(odd,"◀ Lado ímpar")}${sideBlock(even,"Lado par ▶")}</div>${sequential.length?`<div class="heatmap-sequential"><div class="heatmap-side-title">Trecho sequencial</div><div class="heatmap-grid">${sequential.map(column=>`<div class="heatmap-box" style="background:${heatmapColor(column.ocupacao_pct)}" title="Coluna ${column.coluna} — ${column.ocupado}/${column.capacidade} peças (${column.ocupacao_pct}%)">${column.coluna}</div>`).join("")}</div></div>`:""}</div></section>`;
+  }).join("");
+  $("mainContent").innerHTML=`${moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Mapa de Calor","warehouse-heatmap"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"warehouse-heatmap")}<div class="heatmap-legend"><span><i style="background:#2a3646"></i>Vazio</span><span><i style="background:#16803c"></i>Baixa</span><span><i style="background:#f5c400"></i>Média</span><span><i style="background:#e98b08"></i>Alta</span><span><i style="background:#d92d20"></i>Quase cheio</span></div>${streets||'<div class="empty-visual">Nenhum casulo cadastrado.</div>'}`;
+}
 
 function showStoreForm(){const data=unifiedCache.warehouse;const free=data.locations.filter(l=>l.status!=="BLOQUEADO"&&l.occupied_qty<l.capacity);$("storeForm").classList.remove("hidden");$("storeForm").innerHTML=`<div class="inline-form"><div class="field"><label>Endereço</label><select id="storeLocation"><option value="">Selecione</option>${free.map(l=>`<option value="${l.id}">${esc(l.address)} • livre ${l.capacity-l.occupied_qty}</option>`).join("")}</select></div><div class="field"><label>ID do Card</label><input id="storeCard" type="number" placeholder="Opcional"></div><div class="field"><label>Quantidade</label><input id="storeQty" type="number" min="1"></div><div class="field"><label>Marca / categoria</label><input id="storeBrand" placeholder="Marca ou grupo"></div><button class="success" onclick="storeMaterial()">Confirmar guarda</button></div>`;}
 async function storeMaterial(){try{await api("/api/unified/warehouse/store",{method:"POST",body:JSON.stringify({user_id:currentUser.id,location_id:Number($("storeLocation").value),card_id:Number($("storeCard").value||0),quantity:Number($("storeQty").value),brand:$("storeBrand").value,category:$("storeBrand").value})});toast("Mercadoria guardada e capacidade atualizada.");renderWarehouse();}catch(e){toast(e.message)}}
@@ -1681,7 +1739,7 @@ function processingTable(rows){return `<table class="dash-table"><thead><tr><th>
 function returnsTable(rows){return `<table class="dash-table"><thead><tr><th>Devolução</th><th>Loja</th><th>Motivo</th><th>Status</th></tr></thead><tbody>${rows.map(r=>`<tr onclick="openReturn(${r.id})"><td>${esc(r.document_no)}</td><td>${esc(r.store||'—')}</td><td>${r.difference?'Divergência':'Conferência'}</td><td>${statusBadge(r.status)}</td></tr>`).join('')||emptyRows(4)}</tbody></table><button class="panel-link" onclick="goTo('returns-hub')">Ver todas ›</button>`;}
 
 async function renderStorageHub(){setPage("Estocagem","");const [cards,warehouse,analytics]=await Promise.all([safeApi('/api/cards?scope=storage',[]),safeApi('/api/unified/warehouse',{zones:[],locations:[]}),safeApi('/api/unified/warehouse/analytics',{structures:[],categories:[],brands:[],groups:[]})]);const occupied=warehouse.locations.filter(l=>l.occupied_qty>0);$("mainContent").innerHTML=`${moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"storage-hub")}<div class="hero-kpis storage-kpis">${heroKpi("Aguardando estocagem",cards.length,"Cards","⌂","blue","storage")}${heroKpi("Endereços ocupados",occupied.length,"Casulos","▦","teal","warehouse")}${heroKpi("Endereços livres",warehouse.locations.filter(l=>l.status==='DISPONIVEL').length,"Casulos","◇","blue","warehouse")}<div class="hero-card static-card"><div><span>Ocupação geral</span><strong>${warehouse.zones.length?Math.round(warehouse.zones.reduce((a,z)=>a+z.occupancy,0)/warehouse.zones.length):0}%</strong><small>Capacidade cadastrada</small></div></div></div><div class="dash-row storage-layout">${dashboardPanel("▦","Visualizador de casulos","",zonesTable(warehouse.zones))}${dashboardPanel("⌕","Consulta rápida","",`<div class="panel-search"><input id="stockQuickSearch" placeholder="Digite endereço, marca ou categoria" oninput="filterStockQuick()"></div><table class="dash-table"><tbody>${occupied.slice(0,12).map(l=>`<tr class="stock-quick-row" data-search="${esc(normalizeSearch([l.address,l.category,l.structure_type].join(' ')))}"><td><b>${esc(l.address)}</b></td><td>${esc(l.category||'Sem categoria')}</td><td>${l.occupied_qty}/${l.capacity}</td><td>${statusBadge(l.status)}</td></tr>`).join('')||emptyRows(4)}</tbody></table>`)}</div><section class="dash-panel stock-report-panel"><header><b>⇧</b><strong>Relatório de estoque por grupo</strong><button class="panel-action" onclick="document.getElementById('stockGroupPdf').click()">Importar PDF</button><input id="stockGroupPdf" class="hidden" type="file" accept=".pdf" onchange="importStockGroupReport(this)"></header><div class="dash-panel-body">${analytics.groups?.length?`<div class="group-summary">${['FEMININO','MASCULINO','OUTROS'].map(g=>`<div><span>${g}</span><strong>${analytics.groups.filter(x=>x.gender===g).reduce((a,x)=>a+Number(x.quantity),0).toLocaleString('pt-BR')}</strong></div>`).join('')}</div>`:'<div class="empty-visual">Importe o PDF “Resumo de Estoque do Grupo” para recuperar a visão por gênero e grupo.</div>'}</div></section>`;}
-function moduleTabs(items,current){return `<div class="module-tabs">${items.map(([label,view])=>`<button class="${view===current?'active':''}" onclick="goTo('${view}')">${label}</button>`).join('')}</div>`;}
+function moduleTabs(items,current){if(items.some(([,view])=>view==="warehouse")&&!items.some(([,view])=>view==="warehouse-heatmap")){const position=items.findIndex(([,view])=>view==="warehouse")+1;items=[...items.slice(0,position),["Mapa de Calor","warehouse-heatmap"],...items.slice(position)];}return `<div class="module-tabs">${items.map(([label,view])=>`<button class="${view===current?'active':''}" onclick="goTo('${view}')">${label}</button>`).join('')}</div>`;}
 function filterStockQuick(){const t=normalizeSearch($("stockQuickSearch")?.value||'');document.querySelectorAll('.stock-quick-row').forEach(r=>r.classList.toggle('hidden',t&&!r.dataset.search.includes(t)));}
 async function importStockGroupReport(input){if(!input.files?.[0])return;const form=new FormData();form.append('file',input.files[0]);try{const d=await api(`/api/unified/warehouse/import-group-report?user_id=${currentUser.id}`,{method:'POST',body:form});toast(`${d.groups} grupos e ${d.total_qty} peças importados.`);renderStorageHub();}catch(e){toast(e.message)}}
 
