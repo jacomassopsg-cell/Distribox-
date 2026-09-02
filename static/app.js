@@ -491,7 +491,8 @@ function renderReceivingTab() {
     $("cardTab").innerHTML = inCosturaHtml();
     return;
   }
-  $("cardTab").innerHTML = receivingFormHtml(false);
+  const isReturn = cardData.receiving?.receiving_type === "RETORNO" || cardData.receiving_type === "RETORNO";
+  $("cardTab").innerHTML = receivingFormHtml(isReturn);
   window.setTimeout(refreshTimerDisplay, 500);
 }
 
