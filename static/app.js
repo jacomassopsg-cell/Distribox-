@@ -555,9 +555,11 @@ function receivingFormHtml(isReturn) {
   const sampleDone = r.ten_percent_status === "CONCLUIDA";
   const readOnly = operate && !physicalDone ? "" : "readonly";
   const disabled = operate && !physicalDone ? "" : "disabled";
+  const operationItems = r.operation_items || [];
   return `
     <div class="panel-body">
       <div class="notice ${isReturn ? "success-box" : ""}"><b>${isReturn ? "Recebimento do retorno CD01" : "Recebimento de mercadoria nova"}</b><br>${isReturn ? "Registre o retorno e separe uma nova amostra de 10%. O Card só segue para a Inspeção 2 quando as duas partes terminarem." : "O recebimento físico e a separação dos 10% com triagem inicial podem ser concluídos em qualquer ordem. O Card só segue para a Qualidade quando ambos terminarem."}</div>
+      ${isReturn && operationItems.length ? `<div class="notice"><b>${operationItems.length} item(ns) retornaram da Costura</b><br>O recebimento e a nova tiragem de 10% considerarão somente estes itens. Os demais itens da compra permanecerão em suas etapas atuais.</div><div class="table-wrap compact-picker"><table class="compact-table"><thead><tr><th>Produto</th><th>Referência</th><th>Cor</th><th>Tamanho</th><th>Qtd. retornada prevista</th></tr></thead><tbody>${operationItems.map((item)=>`<tr><td><b>${esc(item.product||"—")}</b></td><td>${esc(item.reference||item.sku||"—")}</td><td>${esc(item.color||"—")}</td><td><span class="size-token">${esc(item.size||"—")}</span></td><td><b>${item.expected_qty}</b></td></tr>`).join("")}</tbody></table></div>` : ""}
       <h3 class="section-heading">Recebimento físico</h3>
       <div class="form-grid">
         <div class="field"><label>Volumes</label><input id="recVolumes" type="number" min="0" ${readOnly} value="${r.volumes ?? ""}"></div>
@@ -577,11 +579,12 @@ function receivingFormHtml(isReturn) {
 
 function sampleHtml(r, sampleDone, operate, isReturn=false) {
   const timer = r.timer || { state:"NAO_INICIADA",business_seconds:0,paused_seconds:0,permanence_seconds:0 };
+  const operationTotal = (r.operation_items||[]).reduce((sum,item)=>sum+Number(item.expected_qty||0),0);
   return `
     <h3 class="section-heading">${isReturn ? "Nova tiragem de 10% do retorno" : "Tiragem de 10% + triagem inicial"}</h3>
     <div class="timer-card">
       <div class="form-grid">
-        <div class="field"><label>Quantidade esperada da compra</label><input class="readonly" readonly value="${cardData.expected_total}"></div>
+        <div class="field"><label>${isReturn && operationTotal ? "Quantidade prevista do retorno" : "Quantidade esperada da compra"}</label><input class="readonly" readonly value="${isReturn && operationTotal ? operationTotal : cardData.expected_total}"></div>
         <div class="field"><label>Quantidade mínima (10%)</label><input class="readonly" readonly value="${r.ten_percent_min}"></div>
         <div class="field"><label>Quantidade efetivamente separada</label><input id="sampleActual" type="number" min="0" ${operate && !sampleDone ? "" : "readonly"} value="${r.ten_percent_actual ?? ""}"></div>
       </div>
