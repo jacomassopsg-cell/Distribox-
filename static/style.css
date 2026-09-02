@@ -114,3 +114,6 @@ table{color:#e7eef6}.table-wrap{background:transparent}th{background:#0b1d30;col
 .heatmap-box{width:30px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;cursor:default}
 .heatmap-legend{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:14px;font-size:11px;color:var(--muted)}
 .heatmap-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:middle}
+.heatmap-lados{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.heatmap-lado-titulo{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.heatmap-lado .heatmap-grid{padding:10px;background:#f8fafc;border-radius:8px;border:1px solid var(--border)}
