@@ -705,8 +705,13 @@ def timer_action(con: sqlite3.Connection, receiving_id: int, action: str, user_i
 def current_receiving(con: sqlite3.Connection, card_id: int) -> Optional[dict[str, Any]]:
     row = con.execute(
         """SELECT r.*,u.name physical_completed_by_name
-           FROM receivings r LEFT JOIN users u ON u.id=r.physical_completed_by
-           WHERE r.card_id=? ORDER BY r.id DESC LIMIT 1""",
+           FROM receivings r
+           JOIN cards c ON c.id=r.card_id
+           LEFT JOIN users u ON u.id=r.physical_completed_by
+           WHERE r.card_id=?
+           ORDER BY (r.closed_at IS NULL) DESC,
+                    (r.receiving_type=c.receiving_type) DESC,
+                    r.id DESC LIMIT 1""",
         (card_id,),
     ).fetchone()
     if not row:
