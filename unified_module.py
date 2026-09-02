@@ -14,7 +14,7 @@ from fastapi import File, HTTPException, Request, UploadFile
 from openpyxl import load_workbook
 from pypdf import PdfReader
 
-from warehouse_structure import gerar_todos_casulos
+from warehouse_structure import gerar_todos_casulos, ESTRUTURA_CD
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -676,20 +676,35 @@ def register_unified_routes(app) -> None:
         Visualizador de Casulos do OutLog-Distribox — agrupa os níveis de
         cada coluna e calcula a ocupação (%) pra colorir o quadradinho.
         Usa só o que já está no banco (estrutura física real, já portada);
-        não depende da API ID Brasil pra funcionar."""
+        não depende da API ID Brasil pra funcionar.
+
+        Detalhe importante recuperado do app original: algumas ruas (hoje
+        só a Rua 02) têm um TRECHO SEQUENCIAL além do ímpar/par de verdade
+        (colunas 103-139, sem lado definido — internamente gravadas como
+        "impar" só pra resolver o tipo de estrutura, igual o app original
+        já fazia). Aqui a gente separa isso de novo pra exibição, usando
+        ESTRUTURA_CD como fonte da verdade de quais colunas são cols_seq
+        — sem mexer no dado gravado, só na cara da resposta."""
         con = db_connect()
         rows = con.execute(
             """SELECT aisle,column_no,side,SUM(capacity) capacity,SUM(occupied_qty) occupied,COUNT(*) niveis
                FROM warehouse_locations GROUP BY aisle,column_no,side ORDER BY aisle,column_no"""
         ).fetchall()
         con.close()
+
+        colunas_seq_por_rua = {
+            rua: set(config.get("cols_seq", [])) for rua, config in ESTRUTURA_CD.items()
+        }
+
         ruas: dict[str, list[dict]] = {}
         for r in rows:
             cap = r["capacity"] or 0
             occ = r["occupied"] or 0
             pct = round(occ * 100 / cap, 1) if cap else 0.0
+            eh_sequencial = r["column_no"] in colunas_seq_por_rua.get(r["aisle"], set())
+            secao = "sequencial" if eh_sequencial else r["side"]
             ruas.setdefault(r["aisle"], []).append({
-                "coluna": r["column_no"], "lado": r["side"], "niveis": r["niveis"],
+                "coluna": r["column_no"], "lado": r["side"], "secao": secao, "niveis": r["niveis"],
                 "capacidade": cap, "ocupado": occ, "ocupacao_pct": pct,
             })
         return {"ruas": [{"rua": rua, "colunas": cols} for rua, cols in sorted(ruas.items())]}
