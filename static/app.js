@@ -225,9 +225,9 @@ async function renderCards(scope) {
   const subtitle = quality ? "Inspeção ágil e preenchimento guiado" : processing ? "Seleção compacta de materiais" : labeling ? "Grade por tamanho; Saldo por quantidade" : storage ? "Entrada em estoque por tamanho ou saldo geral" : "Controle geral da produção e posição real de cada item";
   setPage(title, subtitle);
   const cards = await api(`/api/cards?scope=${scope}`);
-  if (processing || labeling || storage) {
+  if (["receiving","quality","processing","labeling","storage"].includes(scope)) {
     const tabs = storage ? moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"storage") : "";
-    $("mainContent").innerHTML = tabs + processingQueueHtml(cards);
+    $("mainContent").innerHTML = tabs + processingQueueHtml(cards, scope);
     filterProductionQueue();
     return;
   }
@@ -242,8 +242,8 @@ async function renderCards(scope) {
     </table></div></div>`;
 }
 
-function processingQueueHtml(cards) {
-  const tab = currentView === "labeling" ? "labeling" : currentView === "storage" ? "storage" : "processing";
+function processingQueueHtml(cards, scope=currentView) {
+  const tab = ["receiving","quality","processing","labeling","storage"].includes(scope) ? scope : "processing";
   const brands = [...new Set(cards.map((c)=>c.brand).filter(Boolean))].sort();
   return `<div class="work-queue">
     <div class="queue-toolbar">
@@ -258,13 +258,29 @@ function processingQueueHtml(cards) {
       <thead><tr><th class="select-col"></th><th>Material / compra</th><th>Fornecedor</th><th>Marca</th><th>Tipo</th><th>Itens</th><th>Qtd.</th><th>Casulo</th><th>Status</th><th></th></tr></thead>
       <tbody id="productionQueueBody">${cards.map((card)=>productionQueueRow(card,tab)).join("") || '<tr><td colspan="10">Nenhum material disponível.</td></tr>'}</tbody>
     </table></div></div>
-    <div id="productionSelectionBar" class="selection-bar hidden"><div><span>Material selecionado</span><b id="productionSelectionLabel"></b></div><div class="actions"><button class="ghost" onclick="clearProductionSelection()">Cancelar</button><button class="primary" onclick="openSelectedProduction('${tab}')">Abrir material →</button></div></div>
+    <div id="productionSelectionBar" class="selection-bar hidden"><div><span>Material selecionado</span><b id="productionSelectionLabel"></b></div><div class="actions"><button class="ghost" onclick="clearProductionSelection()">Cancelar</button><button class="primary" onclick="openSelectedProduction('${tab}')">Abrir controle →</button></div></div>
   </div>`;
+}
+
+function productionActivity(card, tab="processing") {
+  const status=String(card.status||"");
+  if (tab==="receiving") {
+    if (card.receiving_activity==="PAUSADA") return "PAUSADO";
+    if (card.receiving_activity==="EM_ANDAMENTO") return "ATIVO";
+    return "AGUARDANDO";
+  }
+  if (tab==="quality") {
+    if (status==="INSPECAO_PAUSADA") return "PAUSADO";
+    if (["EM_INSPECAO","AGUARDANDO_CONCLUSAO_QUALIDADE"].includes(status)) return "ATIVO";
+    return "AGUARDANDO";
+  }
+  if (tab==="processing") return status==="EM_PROCESSAMENTO" ? "ATIVO" : status==="PROCESSAMENTO_PAUSADO" ? "PAUSADO" : "AGUARDANDO";
+  return "AGUARDANDO";
 }
 
 function productionQueueRow(card,tab="processing") {
   const searchable = [card.purchase_id,card.supplier,card.brand,card.casulo_current,card.original_type,card.material_search].join(" ").toLowerCase();
-  const activity = card.status === "EM_PROCESSAMENTO" ? "ATIVO" : card.status === "PROCESSAMENTO_PAUSADO" ? "PAUSADO" : "AGUARDANDO";
+  const activity = productionActivity(card,tab);
   return `<tr class="production-material-row" tabindex="0" data-id="${card.id}" data-label="${esc(card.purchase_id)} — ${esc(card.brand||card.supplier||'Sem marca')}" data-search="${esc(searchable)}" data-type="${esc(card.purchase_mode||'')}" data-status="${activity}" data-brand="${esc(card.brand||'')}" onclick="selectProductionMaterial(${card.id})" ondblclick="openCard(${card.id},'${tab}')" onkeydown="if(event.key==='Enter')openCard(${card.id},'${tab}')">
     <td class="select-col"><span class="row-selector"></span></td><td><b>${esc(card.purchase_id)}</b><small>${esc(card.original_type||'')}</small></td><td>${esc(card.supplier||"—")}</td><td>${esc(card.brand||"—")}</td><td><span class="type-pill">${card.purchase_mode === "GRADE" ? "Grade" : "Saldo"}</span></td><td>${card.item_count}</td><td><b>${card.expected_total}</b></td><td>${esc(card.casulo_current||"—")}</td><td><span class="badge ${statusClass(card.status)}">${esc(card.status_label)}</span></td><td><button class="row-open" onclick="event.stopPropagation();openCard(${card.id},'${tab}')" aria-label="Abrir material">›</button></td></tr>`;
 }
