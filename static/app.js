@@ -217,6 +217,39 @@ async function renderDashboardLegacy() {
     </div>`;
 }
 
+function metricCardsHtml(scope, totals) {
+  // Cards de métrica (número grande + %) por setor — mesmo espírito do
+  // indicador "Casulos necessários" que só existia no Recebimento antes.
+  if (scope === "receiving") {
+    const qty = totals.receiving_qty || 0;
+    const cap = totals.warehouse_capacity || 0;
+    const pct = cap ? ((qty / cap) * 100).toFixed(1) : "0,0";
+    return `<div class="metric-row-2">
+      <div class="kpi"><div class="kpi-label">Peças aguardando recebimento</div><div class="kpi-value">${qty.toLocaleString("pt-BR")}</div></div>
+      <div class="kpi"><div class="kpi-label">% da capacidade do CD</div><div class="kpi-value">${pct}%</div></div>
+    </div>`;
+  }
+  if (scope === "quality") {
+    const qty = totals.quality_qty || 0;
+    const total = totals.quality || 0, ativo = totals.quality_in_progress || 0;
+    const pct = total ? ((ativo / total) * 100).toFixed(1) : "0,0";
+    return `<div class="metric-row-2">
+      <div class="kpi"><div class="kpi-label">Peças em Qualidade agora</div><div class="kpi-value">${qty.toLocaleString("pt-BR")}</div></div>
+      <div class="kpi"><div class="kpi-label">% em inspeção ativa</div><div class="kpi-value">${pct}%</div></div>
+    </div>`;
+  }
+  if (scope === "processing") {
+    const qty = totals.processing_qty || 0;
+    const total = totals.processing || 0, ativo = totals.processing_in_progress || 0;
+    const pct = total ? ((ativo / total) * 100).toFixed(1) : "0,0";
+    return `<div class="metric-row-2">
+      <div class="kpi"><div class="kpi-label">Peças em Processamento agora</div><div class="kpi-value">${qty.toLocaleString("pt-BR")}</div></div>
+      <div class="kpi"><div class="kpi-label">% em execução ativa</div><div class="kpi-value">${pct}%</div></div>
+    </div>`;
+  }
+  return "";
+}
+
 async function renderCards(scope) {
   const quality = scope === "quality";
   const processing = scope === "processing";
@@ -225,13 +258,17 @@ async function renderCards(scope) {
   const subtitle = quality ? "Inspeção ágil e preenchimento guiado" : processing ? "Seleção compacta de materiais" : labeling ? "Grade por tamanho; Saldo por quantidade" : storage ? "Entrada em estoque por tamanho ou saldo geral" : "Controle geral da produção e posição real de cada item";
   setPage(title, subtitle);
   const cards = await api(`/api/cards?scope=${scope}`);
+  const metrics = ["receiving","quality","processing"].includes(scope)
+    ? metricCardsHtml(scope, (await api("/api/dashboard")).totals)
+    : "";
   if (processing || labeling || storage) {
     const tabs = storage ? moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"storage") : "";
-    $("mainContent").innerHTML = tabs + processingQueueHtml(cards);
+    $("mainContent").innerHTML = tabs + metrics + processingQueueHtml(cards);
     filterProductionQueue();
     return;
   }
   $("mainContent").innerHTML = `
+    ${metrics}
     <div class="toolbar">
       <input id="cardSearch" placeholder="Pesquisar compra, fornecedor, marca ou Casulo" onkeydown="if(event.key==='Enter') searchCards('${scope}')">
       <button class="primary" onclick="searchCards('${scope}')">Pesquisar</button>
