@@ -670,3 +670,74 @@ def register_unified_routes(app) -> None:
     def movements(limit:int=200):
         con=db_connect();rows=[dict(r) for r in con.execute("""SELECT m.*,u.name user_name FROM unified_movements m LEFT JOIN users u ON u.id=m.user_id ORDER BY m.id DESC LIMIT ?""",(max(1,min(limit,1000)),)).fetchall()];con.close();return rows
 
+    @app.get("/api/unified/warehouse/heatmap")
+    def warehouse_heatmap():
+        """Mapa de calor por Rua/coluna, no mesmo espírito visual do
+        Visualizador de Casulos do OutLog-Distribox — agrupa os níveis de
+        cada coluna e calcula a ocupação (%) pra colorir o quadradinho.
+        Usa só o que já está no banco (estrutura física real, já portada);
+        não depende da API ID Brasil pra funcionar."""
+        con = db_connect()
+        rows = con.execute(
+            """SELECT aisle,column_no,side,SUM(capacity) capacity,SUM(occupied_qty) occupied,COUNT(*) niveis
+               FROM warehouse_locations GROUP BY aisle,column_no,side ORDER BY aisle,column_no"""
+        ).fetchall()
+        con.close()
+        ruas: dict[str, list[dict]] = {}
+        for r in rows:
+            cap = r["capacity"] or 0
+            occ = r["occupied"] or 0
+            pct = round(occ * 100 / cap, 1) if cap else 0.0
+            ruas.setdefault(r["aisle"], []).append({
+                "coluna": r["column_no"], "lado": r["side"], "niveis": r["niveis"],
+                "capacidade": cap, "ocupado": occ, "ocupacao_pct": pct,
+            })
+        return {"ruas": [{"rua": rua, "colunas": cols} for rua, cols in sorted(ruas.items())]}
+
+    @app.post("/api/unified/warehouse/id-brasil-preview")
+    async def aplicar_snapshot_id_brasil(request: Request):
+        """Reconhece e aplica um snapshot de casulos no MESMO formato que a
+        API ID Brasil devolveria — uma lista de {rua, linha, coluna,
+        quantidade} — resolvendo o endereço interno (Rua NN-CCC-lado-NIVEL,
+        igual ao warehouse_structure.py) e atualizando occupied_qty.
+
+        IMPORTANTE: isso ainda NÃO chama a API de verdade — o JSON precisa
+        ser colado/enviado manualmente no corpo da requisição. É só pra
+        validar que o reconhecimento do formato e a atualização dos
+        casulos batem certinho, antes de plugar a chamada HTTP real
+        (GET-only) mais pra frente."""
+        data = await request.json()
+        user_id = as_int(data.get("user_id"))
+        con = db_connect()
+        require_user(con, user_id)
+        itens = data.get("itens") or data.get("items") or []
+        aplicados = 0
+        nao_encontrados: list[dict] = []
+        for item in itens:
+            try:
+                rua_num = int(item["rua"])
+                coluna = int(item["coluna"])
+                nivel = str(item["linha"]).strip().upper()
+                quantidade = int(item.get("quantidade", 0) or 0)
+            except (KeyError, TypeError, ValueError):
+                nao_encontrados.append(item)
+                continue
+            lado = "par" if coluna % 2 == 0 else "impar"
+            endereco = f"Rua {rua_num:02d}-{coluna:03d}-{lado}-{nivel}"
+            cur = con.execute(
+                "UPDATE warehouse_locations SET occupied_qty=?,updated_at=? WHERE address=?",
+                (quantidade, now(), endereco),
+            )
+            if cur.rowcount:
+                aplicados += 1
+            else:
+                nao_encontrados.append(item)
+        con.commit()
+        add_movement(
+            con, "ESTOQUE", None, "SNAPSHOT_ID_BRASIL_MANUAL",
+            f"{aplicados} casulos atualizados via JSON colado manualmente ({len(nao_encontrados)} não encontrados).",
+            user_id,
+        )
+        con.close()
+        return {"aplicados": aplicados, "nao_encontrados": len(nao_encontrados), "total_recebido": len(itens)}
+
