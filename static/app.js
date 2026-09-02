@@ -464,7 +464,7 @@ function canDistributeProcessing() {
 
 function renderReceivingTab() {
   activateTab("tabReceivingBtn");
-  if (String(cardData.status||"").startsWith("ORIGEM_") || (cardData.source_snapshot_at && !cardData.receiving)) {
+  if (cardData.source_snapshot_at && !cardData.receiving) {
     window.sourceAllowedStages=null;
     $("cardTab").innerHTML = sourceLocationHtml();
     return;
@@ -757,10 +757,19 @@ async function renderQualityTab() {
     return;
   }
   const q = cardData.quality;
-  if (cardData.source_snapshot_at && !q && cardData.current_sector !== "QUALIDADE") {
+  const importedQualityItems = (cardData.items||[]).filter((item)=>["QUALIDADE","QUALIDADE_RETRABALHO","QUALIDADE_REJEITADO"].includes(item.source_stage));
+  if (cardData.source_snapshot_at && (!q || q.status === "CONCLUIDA") && cardData.current_sector !== "QUALIDADE") {
+    if (importedQualityItems.length && canOperateQuality()) {
+      window.qualitySourceSubset = true;
+      $("cardTab").innerHTML = qualitySetupHtml(null, true);
+      toggleQualitySetupFields();
+      return;
+    }
     renderImportedSectorSnapshot("tabQualityBtn",["QUALIDADE","QUALIDADE_RETRABALHO","QUALIDADE_REJEITADO"],"Itens localizados na Qualidade");
+    if (importedQualityItems.length) $("cardTab").insertAdjacentHTML("afterbegin",'<div class="notice warn">Entre com um perfil da Qualidade, Supervisor ou Administrador para assumir estes itens e iniciar a inspeção.</div>');
     return;
   }
+  window.qualitySourceSubset = false;
   const needsNewInspection = cardData.current_sector === "QUALIDADE" && (!q || q.status === "CONCLUIDA");
   if (needsNewInspection) {
     if (!canOperateQuality()) {
@@ -778,10 +787,11 @@ async function renderQualityTab() {
   $("cardTab").innerHTML = qualityInspectionHtml(q);
 }
 
-function qualitySetupHtml(previousInspection=null) {
+function qualitySetupHtml(previousInspection=null, sourceSubset=false) {
   const defaultType = cardData.receiving_type === "RETORNO" ? 2 : 1;
   const defaultMode = cardData.purchase_mode || previousInspection?.purchase_mode || "";
   return `<div class="panel-body">
+    ${sourceSubset ? `<div class="notice success-box"><b>Controle dos itens importados na Qualidade</b><br>Somente os ${((cardData.items||[]).filter((item)=>["QUALIDADE","QUALIDADE_RETRABALHO","QUALIDADE_REJEITADO"].includes(item.source_stage))).length} item(ns) posicionados neste setor entrarão na inspeção. Os demais itens da compra não serão alterados.</div>` : ""}
     ${previousInspection ? `<div class="notice success-box">A Inspeção ${previousInspection.inspection_type} anterior foi concluída em ${fmtDateTime(previousInspection.completed_at)}. O Card retornou à Qualidade para uma nova rodada.</div>` : ""}
     <div class="notice"><b>Configuração da inspeção</b><br>O tipo da compra vem automaticamente da coluna <b>Tipo</b> do Excel: Private Label = Grade e Saldo = Saldo.</div>
     ${cardData.receiving_type === "RETORNO"
@@ -820,6 +830,7 @@ async function createQualityInspection() {
         destination: $("qualityDestination")?.value || null,
         development_required: requiredValue === "" ? null : requiredValue === "1",
         development_separated: requiredValue !== "1" ? null : (separatedValue === "" ? null : separatedValue === "1"),
+        source_subset: Boolean(window.qualitySourceSubset),
       }),
     });
     toast("Inspeção criada.");
