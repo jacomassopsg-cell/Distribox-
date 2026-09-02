@@ -489,7 +489,7 @@ function sourceLocationHtml() {
     ${cardData.items.map((i)=>`<tr class="source-item-row" data-stage="${esc(i.source_stage)}" data-search="${esc([i.product,i.reference,i.sku,i.color,i.size,i.source_seamstress].join(' ').toLowerCase())}"><td><b>${esc(i.product||'—')}</b></td><td>${esc(i.reference||i.sku||'—')}</td><td>${esc(i.color||'—')}</td><td><b>${esc(i.size||'—')}</b></td><td>${i.expected_qty}</td><td><span class="type-pill">${esc(sourceStageLabel(i.source_stage))}</span><small>${esc(i.source_status_pcp||i.source_status_logistics||i.source_status_quality||'')}</small></td><td>${esc(i.source_seamstress||'—')}</td></tr>`).join("")}
     </tbody></table></div><div class="notice">Atualizado em ${fmtDateTime(cardData.source_snapshot_at)}. Uma nova importação atualiza a posição sem criar outro Card.</div></div>`;
 }
-function sourceStageLabel(s){return ({FORNECEDOR:"No fornecedor",TRANSITO:"Em trânsito",QUALIDADE:"Qualidade",QUALIDADE_RETRABALHO:"Retrabalho",QUALIDADE_REJEITADO:"Rejeitado",PCP_CONFIGURAR:"PCP — configurar",AGUARDANDO_COSTURA:"Vai para Costura",EM_COSTURA:"Na Costura",RETORNO_COSTURA:"Retornou da Costura",AGUARDANDO_PROCESSAMENTO:"Aguardando Processamento",PROCESSAMENTO:"Processamento",ESTOCAGEM:"Estocagem",CONCLUIDO:"Concluído"})[s]||s||"Não classificado";}
+function sourceStageLabel(s){return ({FORNECEDOR:"No fornecedor",TRANSITO:"Em trânsito",QUALIDADE:"Qualidade",QUALIDADE_RETRABALHO:"Retrabalho",QUALIDADE_REJEITADO:"Rejeitado",PCP_CONFIGURAR:"PCP — configurar",AGUARDANDO_COSTURA:"Vai para Costura",EM_COSTURA:"Na Costura",RETORNO_COSTURA:"Retornou da Costura",AGUARDANDO_PROCESSAMENTO:"Aguardando Processamento",PROCESSAMENTO:"Processamento",TRIAGEM:"Triagem",ETIQUETAGEM:"Etiquetagem",ESTOCAGEM:"Estocagem",CONCLUIDO:"Concluído"})[s]||s||"Não classificado";}
 function filterSourceItems(stage="__KEEP__"){
   if(stage!=="__KEEP__") window.sourceStageFilter=stage;
   const term=normalizeSearch($("sourceItemSearch")?.value||"");
@@ -1469,12 +1469,11 @@ async function renderDownstreamTab(sector) {
   activateTab(tabId);
   try { if(!downstreamUsers[sector].length) downstreamUsers[sector]=await api(`/api/downstream/users?sector=${sector}`); } catch(e){$("cardTab").innerHTML=`<div class="notice error">${esc(e.message)}</div>`;return;}
   let op=cardData[key];
-  if(sector==="ESTOCAGEM"&&cardData.source_snapshot_at&&!op?.id&&cardData.current_sector!=="ESTOCAGEM"){
-    renderImportedSectorSnapshot(tabId,["ESTOCAGEM"],"Itens localizados na Estocagem"); return;
-  }
   const allowed=[sector.toLowerCase(),"supervisor","admin"].includes(currentUser.role);
+  const importedItems=(cardData.items||[]).filter((item)=>item.source_stage===sector);
   if(!op?.id){
-    $("cardTab").innerHTML=`<div class="panel-body"><div class="notice"><b>${sector==="ETIQUETAGEM"?"Etiquetagem":"Estocagem"}</b><br>${cardData.purchase_mode==="GRADE"?"Cada colaborador assume um tamanho completo por vez.":"Saldo é dividido por quantidade geral, sem separar tamanhos."}</div>${allowed?`<div class="actions"><button class="primary" onclick="startDownstream('${sector}')">Iniciar controle</button></div>`:'<div class="notice warn">Aguardando um operador do setor.</div>'}</div>`; return;
+    if(cardData.source_snapshot_at&&cardData.current_sector!==sector&&!importedItems.length){renderImportedSectorSnapshot(tabId,[sector],`Itens localizados em ${sector==="ETIQUETAGEM"?"Etiquetagem":"Estocagem"}`);return;}
+    $("cardTab").innerHTML=`<div class="panel-body"><div class="notice"><b>${sector==="ETIQUETAGEM"?"Etiquetagem":"Estocagem"}</b><br>${cardData.purchase_mode==="GRADE"?"Cada colaborador assume um tamanho completo por vez.":"Saldo é dividido por quantidade geral, sem separar tamanhos."}${importedItems.length?`<br><b>${importedItems.length}</b> item(ns) disponível(is) nesta etapa; os demais itens da compra não serão alterados.`:""}</div>${allowed?`<div class="actions"><button class="primary" onclick="startDownstream('${sector}')">Iniciar controle</button></div>`:'<div class="notice warn">Entre com um perfil deste setor, Supervisor ou Administrador para iniciar.</div>'}</div>`; return;
   }
   const grade=op.purchase_mode==="GRADE", open=op.status==="ABERTO";
   $("cardTab").innerHTML=`<div class="panel-body downstream-panel">
@@ -1653,4 +1652,3 @@ async function renderSettings(){setPage("Configurações","");$("mainContent").i
 
 setInterval(() => { if ($("clock")) $("clock").textContent = new Date().toLocaleString("pt-BR"); }, 1000);
 if (currentUser) enterApp();
-
