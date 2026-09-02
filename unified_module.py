@@ -13,6 +13,8 @@ from fastapi import File, HTTPException, Request, UploadFile
 from openpyxl import load_workbook
 from pypdf import PdfReader
 
+from warehouse_structure import ESTRUTURA_CD, gerar_todos_casulos
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("OUTLOG_DATA_DIR", str(BASE_DIR / "data"))).resolve() / "controle_logistica.db"
@@ -258,6 +260,46 @@ def init_unified_db() -> None:
                VALUES(?,?,?,?,?,?,?,?,?)""",
             locations,
         )
+    # Integração segura da estrutura física real do CD. Os endereços antigos
+    # são preservados no banco (inclusive seus lançamentos de estoque), mas
+    # ficam inativos quando a estrutura real está pronta. Nenhum registro é
+    # apagado durante a migração.
+    casulos = gerar_todos_casulos()
+    real_location_count = con.execute(
+        """SELECT COUNT(*) n FROM warehouse_locations l
+           JOIN warehouse_zones z ON z.id=l.zone_id WHERE z.code LIKE 'Rua %'"""
+    ).fetchone()["n"]
+    if real_location_count < len(casulos):
+        ruas_presentes = sorted({c["rua"] for c in casulos}, key=lambda r: int(r.split()[1]))
+        zone_capacity: dict[str, int] = {}
+        zone_gender: dict[str, str] = {}
+        for casulo in casulos:
+            zone_capacity[casulo["rua"]] = zone_capacity.get(casulo["rua"], 0) + int(casulo["capacidade"])
+            zone_gender[casulo["rua"]] = casulo["genero"]
+        con.executemany(
+            """INSERT OR IGNORE INTO warehouse_zones(code,name,gender,capacity,created_at)
+               VALUES(?,?,?,?,?)""",
+            [(rua, rua, zone_gender[rua], zone_capacity[rua], now()) for rua in ruas_presentes],
+        )
+        zone_ids = {r["code"]: r["id"] for r in con.execute(
+            "SELECT id,code FROM warehouse_zones WHERE code LIKE 'Rua %'"
+        )}
+        con.executemany(
+            """INSERT OR IGNORE INTO warehouse_locations(
+               zone_id,address,aisle,side,column_no,level_no,structure_type,capacity,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            [(
+                zone_ids[c["rua"]], c["address"], c["rua"], c["lado"], c["coluna"],
+                c["nivel"], c["tipo_estrutural"], c["capacidade"], now(),
+            ) for c in casulos],
+        )
+        con.execute("UPDATE warehouse_zones SET active=0 WHERE code NOT LIKE 'Rua %'")
+        con.execute("UPDATE warehouse_zones SET active=1 WHERE code LIKE 'Rua %'")
+        add_movement(
+            con, "ESTOQUE", None, "SEED_ESTRUTURA_REAL_SEGURA",
+            f"Estrutura real carregada com {len(casulos)} casulos; endereços legados preservados e inativados.",
+            None,
+        )
     con.commit()
     con.close()
 
@@ -275,7 +317,8 @@ def register_unified_routes(app) -> None:
         con = db_connect()
         sectors = {r["current_sector"]: r["n"] for r in con.execute("SELECT current_sector,COUNT(*) n FROM cards GROUP BY current_sector")}
         warehouse = con.execute(
-            "SELECT COALESCE(SUM(capacity),0) capacity,COALESCE(SUM(occupied_qty),0) occupied,COUNT(*) locations FROM warehouse_locations"
+            """SELECT COALESCE(SUM(l.capacity),0) capacity,COALESCE(SUM(l.occupied_qty),0) occupied,COUNT(*) locations
+               FROM warehouse_locations l JOIN warehouse_zones z ON z.id=l.zone_id WHERE z.active=1"""
         ).fetchone()
         task_counts = {r["status"]: r["n"] for r in con.execute("SELECT status,COUNT(*) n FROM operational_tasks GROUP BY status")}
         return_counts = {r["status"]: r["n"] for r in con.execute("SELECT status,COUNT(*) n FROM returns GROUP BY status")}
@@ -301,7 +344,7 @@ def register_unified_routes(app) -> None:
         con = db_connect()
         sql = """SELECT l.*,z.code zone_code,z.name zone_name,
                  CASE WHEN l.capacity>0 THEN ROUND(l.occupied_qty*100.0/l.capacity,1) ELSE 0 END occupancy
-                 FROM warehouse_locations l JOIN warehouse_zones z ON z.id=l.zone_id WHERE 1=1"""
+                 FROM warehouse_locations l JOIN warehouse_zones z ON z.id=l.zone_id WHERE z.active=1"""
         args: list[Any] = []
         if search:
             sql += " AND (l.address LIKE ? OR l.category LIKE ? OR l.structure_type LIKE ?)"
@@ -315,7 +358,8 @@ def register_unified_routes(app) -> None:
         zones = [dict(r) for r in con.execute(
             """SELECT z.*,COALESCE(SUM(l.occupied_qty),0) occupied,
                CASE WHEN z.capacity>0 THEN ROUND(COALESCE(SUM(l.occupied_qty),0)*100.0/z.capacity,1) ELSE 0 END occupancy
-               FROM warehouse_zones z LEFT JOIN warehouse_locations l ON l.zone_id=z.id GROUP BY z.id ORDER BY z.code"""
+               FROM warehouse_zones z LEFT JOIN warehouse_locations l ON l.zone_id=z.id
+               WHERE z.active=1 GROUP BY z.id ORDER BY z.code"""
         ).fetchall()]
         con.close()
         return {"zones": zones, "locations": locations}
@@ -609,3 +653,38 @@ def register_unified_routes(app) -> None:
     def movements(limit:int=200):
         con=db_connect();rows=[dict(r) for r in con.execute("""SELECT m.*,u.name user_name FROM unified_movements m LEFT JOIN users u ON u.id=m.user_id ORDER BY m.id DESC LIMIT ?""",(max(1,min(limit,1000)),)).fetchall()];con.close();return rows
 
+    @app.get("/api/unified/warehouse/heatmap")
+    def warehouse_heatmap():
+        """Ocupação por Rua/coluna, sem alterar os lançamentos de estoque."""
+        con = db_connect()
+        rows = con.execute(
+            """SELECT l.aisle,l.column_no,l.side,SUM(l.capacity) capacity,
+                      SUM(l.occupied_qty) occupied,COUNT(*) niveis
+               FROM warehouse_locations l JOIN warehouse_zones z ON z.id=l.zone_id
+               WHERE z.active=1
+               GROUP BY l.aisle,l.column_no,l.side ORDER BY l.aisle,l.column_no"""
+        ).fetchall()
+        con.close()
+        sequential_columns = {
+            rua: set(config.get("cols_seq", [])) for rua, config in ESTRUTURA_CD.items()
+        }
+        ruas: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            capacity = int(row["capacity"] or 0)
+            occupied = int(row["occupied"] or 0)
+            section = (
+                "sequencial"
+                if row["column_no"] in sequential_columns.get(row["aisle"], set())
+                else row["side"]
+            )
+            ruas.setdefault(row["aisle"], []).append({
+                "coluna": row["column_no"], "lado": row["side"], "secao": section,
+                "niveis": row["niveis"], "capacidade": capacity, "ocupado": occupied,
+                "ocupacao_pct": round(occupied * 100 / capacity, 1) if capacity else 0.0,
+            })
+        return {
+            "ruas": [
+                {"rua": rua, "colunas": columns}
+                for rua, columns in sorted(ruas.items(), key=lambda item: int(item[0].split()[1]))
+            ]
+        }
