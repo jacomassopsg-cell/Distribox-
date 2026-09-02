@@ -171,3 +171,14 @@ input:disabled,select:disabled,textarea:disabled{
   color:#9fb0c2!important;
   opacity:1;
 }
+
+/* Expedição — preenchimento guiado e conferência */
+.shipping-kpis{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:14px}
+.shipping-panel{overflow:hidden}.shipping-toolbar{display:grid;grid-template-columns:minmax(280px,1fr) 210px;gap:9px;border-bottom:1px solid #243a52}
+.shipping-form-title,.shipping-items-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.shipping-form-title span{display:block;margin-top:4px;color:#91a4b8;font-size:11px}
+.shipping-form-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px}.shipping-form-grid .grow{grid-column:span 2}
+.shipping-items-head{margin-top:15px;padding-top:13px;border-top:1px solid #294058}.shipment-new-item{display:grid;grid-template-columns:1fr 2fr 130px auto;gap:9px;align-items:end;padding:10px;margin:7px 0;background:#071827;border:1px solid #294058;border-radius:8px}.shipment-new-item button{height:38px}
+.shipping-progress{width:150px;max-width:100%;height:7px;margin-bottom:5px;background:#24384d;border-radius:8px;overflow:hidden}.shipping-progress i{display:block;height:100%;background:linear-gradient(90deg,#2f80ed,#62d879);border-radius:8px}.shipping-progress.large{width:100%;height:11px;margin:8px 0}
+.shipping-completion{padding:13px 15px;margin:13px 0;background:#071827;border:1px solid #294058;border-radius:8px}.shipping-completion>div:first-child{display:flex;justify-content:space-between}.shipping-completion span,.shipping-completion small{color:#91a4b8;font-size:11px}.shipping-items{max-height:42vh}.shipping-items input[data-field="notes"]{min-width:180px;padding:7px;border-radius:6px}
+@media(max-width:1100px){.shipping-form-grid{grid-template-columns:repeat(2,1fr)}.shipment-new-item{grid-template-columns:1fr 1.5fr 110px auto}}
+@media(max-width:760px){.shipping-kpis,.shipping-form-grid,.shipping-toolbar,.shipment-new-item{grid-template-columns:1fr}.shipping-form-grid .grow{grid-column:auto}.shipment-new-item button{width:100%}}
