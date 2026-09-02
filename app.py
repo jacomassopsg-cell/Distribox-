@@ -943,6 +943,8 @@ async def import_excel(request: Request, file: UploadFile = File(...)):
             # As demais posições são exibidas no Recebimento como fotografia fiel do relatório.
             if stages == {"TRANSITO"}:
                 ensure_receiving(con, card_id, "NOVA")
+            elif stages == {"RETORNO_COSTURA"}:
+                ensure_receiving(con, card_id, "RETORNO")
         con.execute(
             """INSERT INTO imports(filename,total_rows,matched_rows,cards_created,cards_updated,items_created,items_updated,
                errors,user_id,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)""",
