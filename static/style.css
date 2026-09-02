@@ -108,3 +108,4 @@ table{color:#e7eef6}.table-wrap{background:transparent}th{background:#0b1d30;col
 .kpi,.zone-card{background:linear-gradient(145deg,#0e2238,#0a1b2d);color:#f3f7fb;border-color:#294058}.kpi-label,.kpi-hint,.zone-card small,.zone-card>span{color:#94a7bc}.summary-box{color:#e7eef6}
 .brand-block small{display:inline-block;margin-left:7px;padding:2px 5px;border:1px solid #43586d;border-radius:4px;color:#8fa2b8;font-size:8px;vertical-align:middle}
 
+.metric-row-2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:14px}
