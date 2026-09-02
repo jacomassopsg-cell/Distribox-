@@ -1610,13 +1610,30 @@ function corPorOcupacaoHeatmap(pct) {
 async function renderWarehouseHeatmap() {
   setPage("Mapa de Calor", "Ocupação por Rua e coluna — a cor indica o quanto está ocupado");
   const data = await api("/api/unified/warehouse/heatmap");
-  const secoes = (data.ruas || []).map((r) => `
-    <div class="panel heatmap-rua">
-      <div class="panel-header">${esc(r.rua)} <small>${r.colunas.length} coluna(s)</small></div>
-      <div class="panel-body heatmap-grid">
-        ${r.colunas.map((c) => `<div class="heatmap-box" style="background:${corPorOcupacaoHeatmap(c.ocupacao_pct)}" title="Coluna ${c.coluna} (${esc(c.lado)}) — ${c.ocupado}/${c.capacidade} peças (${c.ocupacao_pct}%), ${c.niveis} nível(is)">${c.coluna}</div>`).join("")}
+  const blocoLado = (colunas, titulo) => {
+    if (!colunas.length) {
+      return `<div class="heatmap-lado"><div class="heatmap-lado-titulo">${titulo}</div><p class="empty-visual">Sem posições neste lado.</p></div>`;
+    }
+    return `<div class="heatmap-lado">
+      <div class="heatmap-lado-titulo">${titulo}</div>
+      <div class="heatmap-grid">
+        ${colunas.map((c) => `<div class="heatmap-box" style="background:${corPorOcupacaoHeatmap(c.ocupacao_pct)}" title="Coluna ${c.coluna} — ${c.ocupado}/${c.capacidade} peças (${c.ocupacao_pct}%), ${c.niveis} nível(is)">${c.coluna}</div>`).join("")}
       </div>
-    </div>`).join("");
+    </div>`;
+  };
+  // Mesma convenção física do OutLog-Distribox: coluna ímpar no lado
+  // esquerdo, par no lado direito — como é de verdade no barracão.
+  const secoes = (data.ruas || []).map((r) => {
+    const impares = r.colunas.filter((c) => c.lado === "impar").sort((a, b) => a.coluna - b.coluna);
+    const pares = r.colunas.filter((c) => c.lado === "par").sort((a, b) => a.coluna - b.coluna);
+    return `<div class="panel heatmap-rua">
+      <div class="panel-header">${esc(r.rua)} <small>${r.colunas.length} coluna(s)</small></div>
+      <div class="panel-body heatmap-lados">
+        ${blocoLado(impares, "◀ Lado Ímpar")}
+        ${blocoLado(pares, "Lado Par ▶")}
+      </div>
+    </div>`;
+  }).join("");
   $("mainContent").innerHTML = `
     ${moduleTabs([["Visão geral","storage-hub"],["Fila operacional","storage"],["Mapa de casulos","warehouse"],["Mapa de Calor","warehouse-heatmap"],["Estatísticas","stock-stats"],["Simulador","capacity-simulator"]],"warehouse-heatmap")}
     <div class="heatmap-legend">
