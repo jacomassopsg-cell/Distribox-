@@ -1176,6 +1176,29 @@ def dashboard():
             OR EXISTS (SELECT 1 FROM items i WHERE i.card_id=c.id AND i.source_stage='ESTOCAGEM')""").fetchone()["n"],
         "processing_in_progress": counts.get("EM_PROCESSAMENTO", 0) + counts.get("PROCESSAMENTO_PAUSADO", 0),
     }
+    def sum_expected(filter_sql: str) -> int:
+        row = con.execute(
+            f"""SELECT COALESCE(SUM(i.expected_qty),0) total FROM cards c
+                LEFT JOIN items i ON i.card_id=c.id WHERE {filter_sql}"""
+        ).fetchone()
+        return int(row["total"] or 0)
+
+    totals["receiving_qty"] = sum_expected(
+        "c.current_sector='RECEBIMENTO' OR c.source_snapshot_at IS NOT NULL"
+    )
+    totals["quality_qty"] = sum_expected(
+        "c.current_sector='QUALIDADE' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id "
+        "AND si.source_stage IN ('QUALIDADE','QUALIDADE_RETRABALHO','QUALIDADE_REJEITADO'))"
+    )
+    totals["processing_qty"] = sum_expected(
+        "c.current_sector='PROCESSAMENTO' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id "
+        "AND si.source_stage IN ('AGUARDANDO_PROCESSAMENTO','PROCESSAMENTO'))"
+    )
+    capacity_row = con.execute(
+        """SELECT COALESCE(SUM(l.capacity),0) total FROM warehouse_locations l
+           JOIN warehouse_zones z ON z.id=l.zone_id WHERE z.active=1"""
+    ).fetchone()
+    totals["warehouse_capacity"] = int(capacity_row["total"] or 0)
     con.close()
     return {
         "totals": totals,
