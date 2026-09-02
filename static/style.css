@@ -116,3 +116,58 @@ table{color:#e7eef6}.table-wrap{background:transparent}th{background:#0b1d30;col
 .heatmap-sequential{margin-top:16px;padding-top:16px;border-top:1px solid #294058}.heatmap-sequential .heatmap-grid{background:#2a240d;border-color:#725f20}
 .heatmap-legend{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:14px;padding:11px 15px;background:#091c30;border:1px solid #294058;border-radius:8px;color:#a8b8c9;font-size:11px}.heatmap-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:middle}
 @media(max-width:900px){.heatmap-sides,.metric-row-2{grid-template-columns:1fr}}
+
+/* Correção de contraste — componentes herdados do tema claro */
+.size-token,
+.type-pill,
+.stage-chip,
+.photo-link,
+.row-open{
+  background:#173654;
+  color:#eef6ff!important;
+  border:1px solid #315777;
+}
+.stage-chip:hover,.row-open:hover{
+  background:#214a70;
+  border-color:#62a9ff;
+  color:#fff!important;
+}
+.selection-bar,
+.bulk-footer,
+.task-card,
+.selected-inspector{
+  background:#0c2034;
+  color:#eef4fb;
+  border-color:#2a435d;
+}
+.modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.modal-card select,
+.modal-card textarea,
+.content input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.content select,
+.content textarea,
+.assignment-result input,
+.tasks-toolbar select{
+  background:#091a2c;
+  color:#eef4fb;
+  border:1px solid #31506c;
+}
+.modal-card input::placeholder,
+.modal-card textarea::placeholder,
+.content input::placeholder,
+.content textarea::placeholder{
+  color:#8195aa;
+  opacity:1;
+}
+.modal-card option,.content option{
+  background:#091a2c;
+  color:#eef4fb;
+}
+input[type="checkbox"],input[type="radio"]{
+  accent-color:#ffca05;
+}
+input:disabled,select:disabled,textarea:disabled{
+  background:#13273a!important;
+  color:#9fb0c2!important;
+  opacity:1;
+}
