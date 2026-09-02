@@ -1004,6 +1004,31 @@ def dashboard():
             OR EXISTS (SELECT 1 FROM items i WHERE i.card_id=c.id AND i.source_stage='ESTOCAGEM')""").fetchone()["n"],
         "processing_in_progress": counts.get("EM_PROCESSAMENTO", 0) + counts.get("PROCESSAMENTO_PAUSADO", 0),
     }
+
+    # Cards de métrica por setor (número grande + %), no mesmo espírito do
+    # indicador "Casulos necessários" que já existia só no Recebimento —
+    # soma de peças esperadas por setor, cruzada com a capacidade real do
+    # CD (Recebimento) ou com o quanto disso está sendo trabalhado agora
+    # de verdade, não só esperando na fila (Qualidade/Processamento).
+    def _soma_esperada(filtro_sql: str) -> int:
+        linha = con.execute(
+            f"""SELECT COALESCE(SUM(i.expected_qty),0) total FROM cards c
+                LEFT JOIN items i ON i.card_id=c.id WHERE {filtro_sql}"""
+        ).fetchone()
+        return int(linha["total"] or 0)
+
+    totals["receiving_qty"] = _soma_esperada("c.current_sector='RECEBIMENTO' OR c.source_snapshot_at IS NOT NULL")
+    totals["quality_qty"] = _soma_esperada(
+        "c.current_sector='QUALIDADE' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id AND si.source_stage IN "
+        "('QUALIDADE','QUALIDADE_RETRABALHO','QUALIDADE_REJEITADO'))"
+    )
+    totals["processing_qty"] = _soma_esperada(
+        "c.current_sector='PROCESSAMENTO' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id AND si.source_stage IN "
+        "('AGUARDANDO_PROCESSAMENTO','PROCESSAMENTO'))"
+    )
+    linha_capacidade = con.execute("SELECT COALESCE(SUM(capacity),0) total FROM warehouse_locations").fetchone()
+    totals["warehouse_capacity"] = int(linha_capacidade["total"] or 0) if linha_capacidade else 0
+
     con.close()
     return {
         "totals": totals,
