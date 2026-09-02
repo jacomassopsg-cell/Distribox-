@@ -1031,7 +1031,7 @@ def list_cards(scope: str = "receiving", search: str = ""):
     elif scope == "processing":
         sql += " AND (c.current_sector='PROCESSAMENTO' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id AND si.source_stage IN ('AGUARDANDO_PROCESSAMENTO','PROCESSAMENTO')))"
     elif scope == "labeling":
-        sql += " AND c.current_sector='ETIQUETAGEM'"
+        sql += " AND (c.current_sector='ETIQUETAGEM' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id AND si.source_stage='ETIQUETAGEM'))"
     elif scope == "storage":
         sql += " AND (c.current_sector='ESTOCAGEM' OR EXISTS (SELECT 1 FROM items si WHERE si.card_id=c.id AND si.source_stage='ESTOCAGEM'))"
     elif scope == "outside":
@@ -1401,4 +1401,3 @@ def global_history(limit: int = 300):
     ).fetchall()
     con.close()
     return [dict(r) for r in rows]
-
